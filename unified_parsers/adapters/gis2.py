@@ -56,7 +56,7 @@ class Gis2Adapter(SourceAdapter):
         output_path = self.output_path(args, project_root)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        return [
+        command = [
             str(python_bin),
             "parser-2gis.py",
             "-i",
@@ -70,6 +70,20 @@ class Gis2Adapter(SourceAdapter):
             "--parser.max-records",
             str(max(1, int(args.max_records))),
         ]
+
+        chrome_binary = (
+            os.environ.get("CHROME_BINARY", "").strip()
+            or os.environ.get("CHROMIUM_BINARY", "").strip()
+        )
+        if not chrome_binary:
+            for candidate in ("/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/google-chrome"):
+                if Path(candidate).exists():
+                    chrome_binary = candidate
+                    break
+        if chrome_binary:
+            command.extend(["--chrome.binary_path", chrome_binary])
+
+        return command
 
     def execution_cwd(self, project_root: Path) -> Path:
         return (project_root / "unified_sources" / "2gis").resolve()

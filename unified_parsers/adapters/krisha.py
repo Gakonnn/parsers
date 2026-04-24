@@ -92,6 +92,17 @@ class KrishaAdapter(SourceAdapter):
         account_password = str(args.account_password)
         if account_password:
             command.extend(["--account-password", account_password])
+        chrome_binary = (
+            os.environ.get("CHROME_BINARY", "").strip()
+            or os.environ.get("CHROMIUM_BINARY", "").strip()
+        )
+        if not chrome_binary:
+            for candidate in ("/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/google-chrome"):
+                if Path(candidate).exists():
+                    chrome_binary = candidate
+                    break
+        if chrome_binary:
+            command.extend(["--chrome-binary", chrome_binary])
         database_url = str(getattr(args, "database_url", "")).strip()
         if database_url:
             command.extend(["--database-url", database_url])
