@@ -1,0 +1,75 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: olx-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-parsers}
+      POSTGRES_USER: ${POSTGRES_USER:-parsers}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-parsers}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-parsers} -d ${POSTGRES_DB:-parsers}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  selenium:
+    image: selenium/standalone-chrome:4.33.0
+    container_name: olx-selenium
+    restart: unless-stopped
+    shm_size: "2gb"
+    ports:
+      - "${SELENIUM_PORT:-4444}:4444"
+      - "${SELENIUM_VNC_PORT:-7900}:7900"
+    environment:
+      SE_NODE_MAX_SESSIONS: 1
+      SE_NODE_OVERRIDE_MAX_SESSIONS: true
+
+  parsers_hub:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: olx-parsers-hub
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      selenium:
+        condition: service_started
+    environment:
+      PARSERS_HUB_HOST: 0.0.0.0
+      PARSERS_HUB_PORT: 8090
+      PARSERS_PROJECT_ROOT: /app
+      PARSERS_PYTHON_BIN: /usr/local/bin/python
+      PARSERS_HUB_DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL: ${DATABASE_URL}
+      CHROME_BINARY: /usr/bin/chromium
+      CHROMIUM_BINARY: /usr/bin/chromium
+      TZ: ${TZ:-Asia/Almaty}
+    ports:
+      - "${PARSERS_HUB_PORT:-8090}:8090"
+    volumes:
+      - ./parsers_hub/runs:/app/parsers_hub/runs
+      - ./unified_runs:/app/unified_runs
+      - ./proxyscrape_premium_http_proxies.txt:/app/proxyscrape_premium_http_proxies.txt:ro
+
+  pgadmin:
+    image: dpage/pgadmin4:9
+    container_name: olx-pgadmin
+    restart: unless-stopped
+    profiles: ["tools"]
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pg_data:

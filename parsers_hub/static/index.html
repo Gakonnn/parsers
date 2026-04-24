@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Parsers Hub</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Local Control Panel</p>
+          <h1>Управление тремя парсерами из одного окна</h1>
+          <p class="hero-text">
+            Выберите источник, задайте параметры, запустите задачу и следите за логом в реальном времени.
+          </p>
+        </div>
+        <div class="hero-badge">
+          <span>OLX</span>
+          <span>2GIS</span>
+          <span>Krisha</span>
+        </div>
+      </header>
+
+      <main class="dashboard">
+        <section class="panel control-panel">
+          <div class="panel-header">
+            <h2>Запуск парсера</h2>
+            <p>Форма меняется в зависимости от выбранного проекта.</p>
+          </div>
+
+          <div class="parser-tabs" id="parser-tabs"></div>
+
+          <form id="run-form" class="run-form">
+            <div id="form-fields" class="form-grid"></div>
+            <div class="form-actions">
+              <button class="primary-button" type="submit">Запустить задачу</button>
+            </div>
+          </form>
+          <p id="form-message" class="form-message"></p>
+        </section>
+
+        <section class="panel jobs-panel">
+          <div class="panel-header">
+            <h2>Задачи</h2>
+            <p>Активные и завершённые запуски.</p>
+          </div>
+          <div id="jobs-list" class="jobs-list"></div>
+        </section>
+
+        <section class="panel details-panel">
+          <div class="panel-header">
+            <h2>Детали</h2>
+            <p>Команда, статус, путь к результату и live-лог.</p>
+          </div>
+          <div id="job-details" class="job-details empty-state">
+            Выберите задачу справа, чтобы посмотреть детали запуска.
+          </div>
+        </section>
+
+        <section class="panel db-panel">
+          <div class="panel-header">
+            <h2>Результаты БД</h2>
+            <p>Просмотр записей из PostgreSQL с фильтрами и отдельными колонками.</p>
+          </div>
+
+          <form id="db-filter-form" class="db-filter-form">
+            <select id="db-source" name="source">
+              <option value="">Все источники</option>
+              <option value="olx">OLX</option>
+              <option value="krisha">Krisha</option>
+              <option value="2gis">2GIS</option>
+            </select>
+            <select id="db-run-status" name="run_status">
+              <option value="">Любой статус запуска</option>
+              <option value="running">running</option>
+              <option value="completed">completed</option>
+              <option value="failed">failed</option>
+              <option value="stopped">stopped</option>
+              <option value="paused">paused</option>
+              <option value="queued">queued</option>
+            </select>
+            <select id="db-has-phone" name="has_phone">
+              <option value="">Телефон: любой</option>
+              <option value="yes">Есть телефон</option>
+              <option value="no">Нет телефона</option>
+            </select>
+            <input id="db-search" name="search" type="text" placeholder="Поиск: title, id, phone, url..." />
+            <select id="db-limit" name="limit">
+              <option value="50">50</option>
+              <option value="100" selected>100</option>
+              <option value="200">200</option>
+            </select>
+            <button class="ghost-button" type="submit">Применить</button>
+          </form>
+
+          <div id="db-summary" class="db-summary">Загрузка...</div>
+          <div class="db-table-wrap">
+            <table class="db-table">
+              <thead>
+                <tr>
+                  <th>Время</th>
+                  <th>Source</th>
+                  <th>Run</th>
+                  <th>ID</th>
+                  <th>Title / Name</th>
+                  <th>Phone</th>
+                  <th>Price</th>
+                  <th>Location</th>
+                  <th>Status</th>
+                  <th>Error</th>
+                  <th>URL</th>
+                </tr>
+              </thead>
+              <tbody id="db-results-body"></tbody>
+            </table>
+          </div>
+          <div class="db-pagination">
+            <button class="ghost-button" type="button" id="db-prev-page">Назад</button>
+            <button class="ghost-button" type="button" id="db-next-page">Вперёд</button>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Runtime outputs
+parsers_hub/runs/
+unified_runs/
+*.log
+
+# Local env
+.env
+
+# Optional heavy artifacts
+*.sqlite
+*.db

@@ -1,0 +1,13 @@
+.git
+.gitignore
+.idea
+__pycache__
+*.pyc
+venv/
+.parsed
+*.xlsx
+*.csv
+*.json
+parsers_hub/runs/
+unified_runs/
+.DS_Store
