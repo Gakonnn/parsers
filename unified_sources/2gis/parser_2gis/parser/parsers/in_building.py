@@ -63,7 +63,6 @@ class InBuildingParser(MainParser):
 
         # Parsed records
         collected_records = 0
-        used_response_ids: set[str] = set()
 
         # Already visited links
         visited_links: set[str] = set()
@@ -79,7 +78,7 @@ class InBuildingParser(MainParser):
         # Loop down through lazy load organizations list
         while True:
             # Wait all 2GIS requests get finished
-            self._wait_requests_finished(timeout=25)
+            self._wait_requests_finished()
 
             # Gather links to be clicked
             links = get_unique_links()
@@ -88,7 +87,6 @@ class InBuildingParser(MainParser):
 
             # Iterate through gathered links
             for link in links:
-                link_href = link.attributes.get('href')
                 for _ in range(3):  # 3 attempts to get response
                     # Click the link to provoke request
                     # with a auth key and secret arguments
@@ -96,11 +94,7 @@ class InBuildingParser(MainParser):
                         self._chrome_remote.perform_click(link)
                     except Exception:
                         # DOM could be re-rendered between snapshot and click,
-                        # refresh the node and try again.
-                        if link_href:
-                            fresh_link = self._get_fresh_link(link_href)
-                            if fresh_link:
-                                link = fresh_link
+                        # skip this attempt and try again.
                         resp = None
                         continue
 
@@ -110,7 +104,7 @@ class InBuildingParser(MainParser):
                         self._chrome_remote.wait(self._options.delay_between_clicks / 1000)
 
                     # Gather response and collect useful payload.
-                    resp = self._pick_response(used_response_ids)
+                    resp = self._chrome_remote.wait_response(self._item_response_pattern)
 
                     # If request is failed - repeat, otherwise go further.
                     if resp and resp['status'] >= 0:
