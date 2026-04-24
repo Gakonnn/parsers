@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import re
 from typing import TYPE_CHECKING
 
@@ -116,17 +115,7 @@ class InBuildingParser(MainParser):
                     if resp and resp['status'] >= 0:
                         break
 
-                # Get response body data
-                if resp and resp['status'] >= 0:
-                    data = self._chrome_remote.get_response_body(resp, timeout=10) if resp else None
-
-                    try:
-                        doc = json.loads(data)
-                    except json.JSONDecodeError:
-                        logger.error('Сервер вернул некорректный JSON документ: "%s", пропуск позиции.', data)
-                        doc = None
-                else:
-                    doc = None
+                doc = self._read_item_document(resp, used_response_ids)
 
                 if doc:
                     # Write API document into a file

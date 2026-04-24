@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..common import wait_until_finished
@@ -30,13 +31,20 @@ class ChromeBrowser():
 
         logger.debug('Запуск Chrome Браузера.')
 
-        self._profile_path = tempfile.mkdtemp()
+        profile_dir = os.environ.get("PARSER2GIS_PROFILE_DIR", "").strip()
+        self._persistent_profile = bool(profile_dir)
+        if self._persistent_profile:
+            Path(profile_dir).mkdir(parents=True, exist_ok=True)
+            self._profile_path = profile_dir
+        else:
+            self._profile_path = tempfile.mkdtemp()
         self._remote_port = free_port()
         self._chrome_cmd = [
             binary_path,
             f'--remote-debugging-port={self._remote_port}',
             f'--user-data-dir={self._profile_path}', '--no-default-browser-check',
             '--no-first-run', '--no-sandbox', '--disable-fre',
+            '--disable-dev-shm-usage',
             '--remote-allow-origins=*',
             f'--js-flags=--expose-gc --max-old-space-size={chrome_options.memory_limit}',
         ]
@@ -85,7 +93,8 @@ class ChromeBrowser():
         self._proc.wait()
 
         # Delete temporary profile
-        self._delete_profile()
+        if not self._persistent_profile:
+            self._delete_profile()
 
     def __repr__(self) -> str:
         classname = self.__class__.__name__
