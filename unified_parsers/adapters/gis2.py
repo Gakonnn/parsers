@@ -83,6 +83,12 @@ class Gis2Adapter(SourceAdapter):
         if chrome_binary:
             command.extend(["--chrome.binary_path", chrome_binary])
 
+        headless_env = os.environ.get("PARSERS_2GIS_HEADLESS", "").strip().lower()
+        if not headless_env and Path("/.dockerenv").exists():
+            headless_env = "yes"
+        if headless_env in {"1", "true", "yes", "on"}:
+            command.extend(["--chrome.headless", "yes"])
+
         return command
 
     def execution_cwd(self, project_root: Path) -> Path:

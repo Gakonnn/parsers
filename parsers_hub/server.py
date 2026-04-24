@@ -33,6 +33,7 @@ GIS_DIR = UNIFIED_SOURCES_DIR / "2gis"
 KRISHA_DIR = UNIFIED_SOURCES_DIR / "krisha"
 DEFAULT_PYTHON_BIN = Path(os.environ.get("PARSERS_PYTHON_BIN", "").strip() or str(OLX_DIR / "venv/bin/python"))
 DEFAULT_DATABASE_URL = os.environ.get("PARSERS_HUB_DATABASE_URL", "postgresql://gakon@127.0.0.1:55432/parsers")
+DEFAULT_HEADLESS = os.environ.get("PARSERS_DEFAULT_HEADLESS", "true").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def resolve_python_bin(source_dir: Path) -> str:
@@ -374,7 +375,7 @@ def parser_definitions() -> dict[str, Any]:
                 {"name": "driver", "label": "Режим", "type": "select", "required": True, "default": "selenium", "options": ["selenium", "http"]},
                 {"name": "browser", "label": "Браузер", "type": "select", "required": True, "default": "chrome", "options": ["chrome", "safari"]},
                 {"name": "no_proxy", "label": "Без proxy", "type": "checkbox", "required": False, "default": True},
-                {"name": "headless", "label": "Headless режим", "type": "checkbox", "required": False, "default": False},
+                {"name": "headless", "label": "Headless режим", "type": "checkbox", "required": False, "default": DEFAULT_HEADLESS},
                 {"name": "cookie_file", "label": "Файл cookie", "type": "text", "required": False, "default": ""},
                 {"name": "account_login", "label": "Логин аккаунта", "type": "text", "required": False, "default": ""},
                 {"name": "account_password", "label": "Пароль аккаунта", "type": "password", "required": False, "default": ""},
