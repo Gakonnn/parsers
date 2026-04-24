@@ -17,7 +17,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxss1 \
     libxrandr2 \
     xvfb \
-    xauth \
     xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
