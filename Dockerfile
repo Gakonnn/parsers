@@ -16,7 +16,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2 \
     libxss1 \
     libxrandr2 \
-    xvfb \
     xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 

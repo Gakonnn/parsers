@@ -49,9 +49,6 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       CHROME_BINARY: /usr/bin/chromium
       CHROMIUM_BINARY: /usr/bin/chromium
-      PARSERS_2GIS_HEADLESS: "no"
-      PARSERS_2GIS_USE_XVFB: "yes"
-      PARSER2GIS_PROFILE_DIR: /app/parsers_hub/runs/_profiles/2gis
       TZ: ${TZ:-Asia/Almaty}
     ports:
       - "${PARSERS_HUB_PORT:-8090}:8090"

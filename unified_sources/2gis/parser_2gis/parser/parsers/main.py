@@ -127,12 +127,9 @@ class MainParser:
     def _response_request_id(resp: dict) -> Optional[str]:
         return resp.get('meta', {}).get('requestId')
 
-    def _pick_response(self,
-                       used_response_ids: set[str],
-                       wait_timeout: int = 8,
-                       backfill_timeout: int = 1) -> Optional[dict]:
+    def _pick_response(self, used_response_ids: set[str]) -> Optional[dict]:
         """Get response for item, fallback to buffered responses if needed."""
-        resp = self._chrome_remote.wait_response(self._item_response_pattern, timeout=wait_timeout)
+        resp = self._chrome_remote.wait_response(self._item_response_pattern, timeout=8)
         if resp and resp.get('status', -1) >= 0:
             req_id = self._response_request_id(resp)
             if req_id and req_id in used_response_ids:
@@ -142,7 +139,7 @@ class MainParser:
                     used_response_ids.add(req_id)
                 return resp
 
-        responses = self._chrome_remote.get_responses(timeout=backfill_timeout)
+        responses = self._chrome_remote.get_responses(timeout=1)
         for candidate in reversed(responses):
             url = candidate.get('url', '')
             if not re.match(self._item_response_pattern, url):
@@ -155,30 +152,6 @@ class MainParser:
             if req_id:
                 used_response_ids.add(req_id)
             return candidate
-
-        return None
-
-    def _read_item_document(self,
-                            resp: Optional[dict],
-                            used_response_ids: set[str]) -> Optional[dict]:
-        """Parse item payload with retries when response body is temporarily empty."""
-        if not resp or resp.get('status', -1) < 0:
-            return None
-
-        for _ in range(3):
-            data = self._chrome_remote.get_response_body(resp, timeout=6)
-            if data and data.strip():
-                try:
-                    return json.loads(data)
-                except json.JSONDecodeError:
-                    logger.error('Сервер вернул некорректный JSON документ: "%s", пропуск позиции.', data)
-                    return None
-
-            self._chrome_remote.wait(0.2)
-            fallback = self._pick_response(used_response_ids, wait_timeout=2, backfill_timeout=0)
-            if not fallback:
-                break
-            resp = fallback
 
         return None
 
@@ -298,7 +271,16 @@ class MainParser:
                             break
 
                     # Get response body data
-                    doc = self._read_item_document(resp, used_response_ids)
+                    if resp and resp['status'] >= 0:
+                        data = self._chrome_remote.get_response_body(resp, timeout=10) if resp else None
+
+                        try:
+                            doc = json.loads(data)
+                        except json.JSONDecodeError:
+                            logger.error('Сервер вернул некорректный JSON документ: "%s", пропуск позиции.', data)
+                            doc = None
+                    else:
+                        doc = None
 
                     if doc:
                         # Write API document into a file

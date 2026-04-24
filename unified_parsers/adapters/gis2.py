@@ -85,23 +85,9 @@ class Gis2Adapter(SourceAdapter):
 
         headless_env = os.environ.get("PARSERS_2GIS_HEADLESS", "").strip().lower()
         if not headless_env and Path("/.dockerenv").exists():
-            # In Docker prefer headed mode under Xvfb; it behaves closer to local desktop browser.
-            headless_env = "no"
+            headless_env = "yes"
         if headless_env in {"1", "true", "yes", "on"}:
             command.extend(["--chrome.headless", "yes"])
-        else:
-            command.extend(["--chrome.headless", "no"])
-
-            use_xvfb = os.environ.get("PARSERS_2GIS_USE_XVFB", "").strip().lower()
-            if not use_xvfb and Path("/.dockerenv").exists():
-                use_xvfb = "yes"
-            if use_xvfb in {"1", "true", "yes", "on"}:
-                command = [
-                    "xvfb-run",
-                    "-a",
-                    "--server-args=-screen 0 1920x1080x24",
-                    *command,
-                ]
 
         return command
 
