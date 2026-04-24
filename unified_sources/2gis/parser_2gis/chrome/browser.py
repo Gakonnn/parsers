@@ -52,14 +52,6 @@ class ChromeBrowser():
         if chrome_options.start_maximized:
             self._chrome_cmd.append('--start-maximized')
 
-        proxy_url = os.environ.get("PARSER2GIS_PROXY_URL", "").strip()
-        if proxy_url:
-            self._chrome_cmd.append(f'--proxy-server={proxy_url}')
-
-            ignore_cert_errors = os.environ.get("PARSER2GIS_IGNORE_CERT_ERRORS", "").strip().lower()
-            if ignore_cert_errors in {"", "1", "true", "yes", "on"}:
-                self._chrome_cmd.append('--ignore-certificate-errors')
-
         if chrome_options.headless:
             logger.debug('В Chrome установлен в скрытый режим.')
             self._chrome_cmd.append('--headless')
