@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import sys
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
 
@@ -44,7 +46,12 @@ class Gis2Adapter(SourceAdapter):
         gis_dir = (project_root / "unified_sources" / "2gis").resolve()
         python_bin = gis_dir / ".venv/bin/python"
         if not python_bin.exists():
-            python_bin = project_root / "venv/bin/python"
+            fallback = project_root / "venv/bin/python"
+            if fallback.exists():
+                python_bin = fallback
+            else:
+                env_python = os.environ.get("PARSERS_PYTHON_BIN", "").strip()
+                python_bin = Path(env_python) if env_python else Path(sys.executable)
 
         output_path = self.output_path(args, project_root)
         output_path.parent.mkdir(parents=True, exist_ok=True)
