@@ -28,6 +28,7 @@ class ChromeOptions(BaseModel):
     """
     binary_path: Optional[pathlib.Path] = None
     user_agent: str = ""
+    accept_language: str = "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7"
     start_maximized: bool = False
     headless: bool = False
     disable_images: bool = True

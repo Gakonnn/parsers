@@ -12,6 +12,11 @@ class Gis2Adapter(SourceAdapter):
     key = "2gis"
     title = "2GIS"
     implemented = True
+    _DEFAULT_BROWSER_UA = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/91.0.4472.124 Safari/537.36"
+    )
 
     def add_run_arguments(self, parser: ArgumentParser) -> None:
         parser.add_argument(
@@ -91,6 +96,8 @@ class Gis2Adapter(SourceAdapter):
             command.extend(["--chrome.headless", "yes"])
 
         user_agent = str(getattr(args, "user_agent", "")).strip() or os.environ.get("PARSERS_2GIS_USER_AGENT", "").strip()
+        if not user_agent and Path("/.dockerenv").exists():
+            user_agent = self._DEFAULT_BROWSER_UA
         if user_agent:
             command.extend(["--chrome.user-agent", user_agent])
 
