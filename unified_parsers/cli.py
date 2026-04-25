@@ -99,10 +99,6 @@ def handle_run(args: argparse.Namespace) -> int:
 
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
-    if adapter.key == "2gis":
-        provider = str(getattr(args, "http_provider", "")).strip().lower()
-        if provider:
-            env["PARSERS_2GIS_HTTP_PROVIDER"] = provider
     output_target = str(getattr(args, "output_target", "file")).strip().lower()
     database_url = str(getattr(args, "database_url", "")).strip() or os.environ.get("DATABASE_URL", "").strip()
     live_db_supported_sources = {"krisha", "2gis"}

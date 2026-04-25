@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import base64
-import os
 import queue
 import re
 import threading
-from urllib.parse import urlencode
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 import pychrome
@@ -28,13 +26,6 @@ if TYPE_CHECKING:
 # Apply all custom patches
 patch_all()
 
-SCRAPERAPI_ENDPOINT = "https://api.scraperapi.com/"
-CRAWLBASE_ENDPOINT = "https://api.crawlbase.com/"
-DEFAULT_FALLBACK_PROVIDER = "off"
-DEFAULT_SCRAPERAPI_KEY = "1ad559ff083d0fe48e3247faea63c745"
-DEFAULT_CRAWLBASE_TOKEN = "QTJJCKbfuH48b55m3Twt_w"
-DEFAULT_CRAWLBASE_JS_TOKEN = "5_JX-_tCFVkw8HK--wYKyg"
-
 
 class ChromeRemote:
     """Wrapper for Chrome DevTools Protocol Interface.
@@ -52,61 +43,6 @@ class ChromeRemote:
         self._response_queues: dict[str, queue.Queue[Response]] = {x: queue.Queue() for x in response_patterns}
         self._requests: dict[str, Request] = {}  # _requests[request_id] = <Request>
         self._requests_lock = threading.Lock()
-        self._http_fallback_provider = os.environ.get(
-            "PARSERS_2GIS_HTTP_PROVIDER",
-            DEFAULT_FALLBACK_PROVIDER,
-        ).strip().lower()
-        self._http_fallback_timeout = float(
-            os.environ.get("PARSERS_2GIS_HTTP_TIMEOUT", "20").strip() or "20"
-        )
-        self._scraperapi_key = os.environ.get("SCRAPERAPI_KEY", "").strip() or DEFAULT_SCRAPERAPI_KEY
-        self._crawlbase_token = os.environ.get("CRAWLBASE_TOKEN", "").strip() or DEFAULT_CRAWLBASE_TOKEN
-        self._crawlbase_js_token = os.environ.get("CRAWLBASE_JS_TOKEN", "").strip() or DEFAULT_CRAWLBASE_JS_TOKEN
-
-    def _build_fallback_attempts(self, target_url: str) -> list[str]:
-        provider = self._http_fallback_provider
-        if provider in {"", "off", "none"}:
-            return []
-
-        direct_url = target_url
-        attempts: list[str] = []
-        if self._crawlbase_token:
-            attempts.append(f"{CRAWLBASE_ENDPOINT}?{urlencode({'token': self._crawlbase_token, 'url': target_url})}")
-        if self._crawlbase_js_token:
-            attempts.append(f"{CRAWLBASE_ENDPOINT}?{urlencode({'token': self._crawlbase_js_token, 'url': target_url})}")
-        if self._scraperapi_key:
-            attempts.append(f"{SCRAPERAPI_ENDPOINT}?{urlencode({'api_key': self._scraperapi_key, 'url': target_url})}")
-
-        if provider == "crawlbase":
-            return attempts[:2]
-        if provider == "scraperapi":
-            return [x for x in attempts if x.startswith(SCRAPERAPI_ENDPOINT)]
-        if provider == "direct":
-            return [direct_url]
-        if provider == "auto":
-            return [*attempts, direct_url]
-        # Unknown provider: be permissive.
-        return [*attempts, direct_url]
-
-    def _fetch_response_body_fallback(self, target_url: str) -> str:
-        for attempt_url in self._build_fallback_attempts(target_url):
-            try:
-                response = requests.get(
-                    attempt_url,
-                    timeout=self._http_fallback_timeout,
-                    headers={
-                        "User-Agent": self._chrome_options.user_agent or "Mozilla/5.0",
-                        "Accept-Language": self._chrome_options.accept_language,
-                    },
-                )
-                if response.status_code >= 400:
-                    continue
-                text = response.text
-                if text:
-                    return text
-            except requests.RequestException:
-                continue
-        return ""
 
     @wait_until_finished(timeout=60)
     def _connect_interface(self) -> bool:
@@ -236,13 +172,6 @@ class ChromeRemote:
                 # If response is desired, put it in the queue
                 for pattern in self._response_patterns:
                     if re.match(pattern, request_url):
-                        # Optional HTTP-provider fallback for blocked/timeouted API calls.
-                        fallback_body = self._fetch_response_body_fallback(request_url)
-                        if fallback_body:
-                            response['status'] = 200
-                            response['statusText'] = 'ok_provider_fallback'
-                            response['url'] = request_url
-                            response['body'] = fallback_body
                         self._response_queues[pattern].put(response)
 
         def requestWillBeSent(**kwargs) -> None:
@@ -355,8 +284,6 @@ class ChromeRemote:
         Args:
             response: Response.
         """
-        if isinstance(response.get('body'), str) and response.get('body'):
-            return response['body']
         try:
             request_id = response['meta']['requestId']
             response_data = self._chrome_tab.call_method('Network.getResponseBody',
