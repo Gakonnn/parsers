@@ -45,31 +45,6 @@ http://127.0.0.1:8090
 postgresql://postgres:postgres@127.0.0.1:5432/parsers
 ```
 
-## 2GIS через домашний IP (Home Worker)
-
-Для `2GIS` в форме появился выбор `Где запускать 2GIS`:
-
-- `home_worker` (по умолчанию) — задача ставится в очередь на сервере и выполняется на домашнем ПК
-- `server` — обычный запуск внутри сервера
-
-### 1) На сервере включить токен воркера
-
-Укажи переменную окружения для `parsers_hub`:
-
-```text
-PARSERS_WORKER_TOKEN=<любой_длинный_секрет>
-```
-
-### 2) Запустить домашний worker на ПК с Wi-Fi IP
-
-```bash
-/Users/gakon/PycharmProjects/olx/venv/bin/python /Users/gakon/PycharmProjects/olx/parsers_hub/home_worker_2gis.py \
-  --server-url http://46.62.225.70:8090 \
-  --token <PARSERS_WORKER_TOKEN>
-```
-
-После этого `2GIS` задачи из Hub (режим `home_worker`) будут выполняться локально, а логи и статусы отобразятся в серверном интерфейсе.
-
 ## Как это устроено
 
 Фронтенд не заменяет ваши существующие проекты. Он работает как control panel и запускает:

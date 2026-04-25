@@ -34,7 +34,6 @@ KRISHA_DIR = UNIFIED_SOURCES_DIR / "krisha"
 DEFAULT_PYTHON_BIN = Path(os.environ.get("PARSERS_PYTHON_BIN", "").strip() or str(OLX_DIR / "venv/bin/python"))
 DEFAULT_DATABASE_URL = os.environ.get("PARSERS_HUB_DATABASE_URL", "postgresql://gakon@127.0.0.1:55432/parsers")
 DEFAULT_HEADLESS = os.environ.get("PARSERS_DEFAULT_HEADLESS", "true").strip().lower() in {"1", "true", "yes", "on"}
-WORKER_TOKEN = os.environ.get("PARSERS_WORKER_TOKEN", "").strip()
 
 
 def resolve_python_bin(source_dir: Path) -> str:
@@ -61,10 +60,6 @@ class Job:
     stop_requested: bool = False
     snapshots: list[str] = field(default_factory=list)
     last_snapshot_at: str | None = None
-    run_mode: str = "server"
-    raw_payload: dict[str, Any] = field(default_factory=dict)
-    worker_id: str | None = None
-    worker_claimed_at: str | None = None
 
     def snapshot(self) -> dict[str, Any]:
         return {
@@ -81,9 +76,6 @@ class Job:
             "stop_requested": self.stop_requested,
             "snapshots": self.snapshots[-30:],
             "last_snapshot_at": self.last_snapshot_at,
-            "run_mode": self.run_mode,
-            "worker_id": self.worker_id,
-            "worker_claimed_at": self.worker_claimed_at,
             "log": "".join(self.log_lines[-400:]),
         }
 
@@ -118,44 +110,13 @@ class JobManager:
         thread.start()
         return job
 
-    def create_remote_job(
-        self,
-        parser_key: str,
-        payload: dict[str, Any],
-        output_path: Path,
-        run_mode: str = "home_worker",
-    ) -> Job:
-        now = utc_now()
-        job = Job(
-            job_id=uuid.uuid4().hex[:12],
-            parser_key=parser_key,
-            command=["remote-worker", parser_key],
-            cwd=str(OLX_DIR),
-            output_path=str(output_path),
-            created_at=now,
-            status="queued",
-            run_mode=run_mode,
-            raw_payload=dict(payload),
-        )
-        with self._lock:
-            self._jobs[job.job_id] = job
-        return job
-
     def restart_job(self, job_id: str) -> Job | None:
-        remote_restart: tuple[str, dict[str, Any], Path, str] | None = None
         with self._lock:
             source = self._jobs.get(job_id)
             if not source:
                 return None
             if source.status in {"running", "paused", "queued"}:
                 return None
-            if source.run_mode == "home_worker":
-                parser_key = source.parser_key
-                payload = dict(source.raw_payload)
-                old_output = Path(source.output_path)
-                new_output = self._make_restarted_output_path(old_output)
-                run_mode = source.run_mode
-                remote_restart = (parser_key, payload, new_output, run_mode)
             command = list(source.command)
             cwd = Path(source.cwd)
             old_output = Path(source.output_path)
@@ -163,14 +124,6 @@ class JobManager:
             command = self._replace_output_in_command(command, old_output, new_output)
             parser_key = source.parser_key
 
-        if remote_restart is not None:
-            parser_key, payload, new_output, run_mode = remote_restart
-            return self.create_remote_job(
-                parser_key=parser_key,
-                payload=payload,
-                output_path=new_output,
-                run_mode=run_mode,
-            )
         return self.create_job(parser_key, command, cwd, new_output)
 
     def stop_job(self, job_id: str) -> Job | None:
@@ -179,14 +132,6 @@ class JobManager:
             if not job:
                 return None
             job.stop_requested = True
-            if job.run_mode == "home_worker":
-                if job.status == "queued":
-                    job.status = "stopped"
-                    job.finished_at = utc_now()
-                    job.log_lines.append("[hub] Remote job stopped before claim.\n")
-                else:
-                    job.log_lines.append("[hub] Stop requested for remote worker job.\n")
-                return job
             process = job.process
         if process and process.poll() is None:
             self._terminate_process_group(process)
@@ -237,60 +182,6 @@ class JobManager:
                 job.snapshots.append(artifact)
             job.last_snapshot_at = snapshot_info["saved_at"]
         return snapshot_info
-
-    def claim_remote_job(self, parser_key: str, worker_id: str) -> Job | None:
-        with self._lock:
-            for job in self._jobs.values():
-                if job.parser_key != parser_key:
-                    continue
-                if job.run_mode != "home_worker":
-                    continue
-                if job.status != "queued":
-                    continue
-                job.status = "running"
-                job.started_at = utc_now()
-                job.worker_id = worker_id
-                job.worker_claimed_at = utc_now()
-                job.log_lines.append(f"[hub] Claimed by worker: {worker_id}\n")
-                return job
-        return None
-
-    def append_remote_log(self, job_id: str, lines: list[str]) -> Job | None:
-        with self._lock:
-            job = self._jobs.get(job_id)
-            if not job or job.run_mode != "home_worker":
-                return None
-            for line in lines:
-                text = str(line)
-                if not text.endswith("\n"):
-                    text += "\n"
-                job.log_lines.append(text)
-            if len(job.log_lines) > 2000:
-                job.log_lines = job.log_lines[-2000:]
-            return job
-
-    def complete_remote_job(
-        self,
-        job_id: str,
-        return_code: int,
-        status: str | None = None,
-        output_path: str = "",
-    ) -> Job | None:
-        with self._lock:
-            job = self._jobs.get(job_id)
-            if not job or job.run_mode != "home_worker":
-                return None
-            job.return_code = int(return_code)
-            job.finished_at = utc_now()
-            if output_path:
-                job.output_path = output_path
-            if job.stop_requested:
-                job.status = "stopped"
-            elif status in {"completed", "failed", "stopped"}:
-                job.status = status
-            else:
-                job.status = "completed" if job.return_code == 0 else "failed"
-            return job
 
     def _append_log(self, job: Job, line: str) -> None:
         with self._lock:
@@ -462,19 +353,11 @@ def parser_definitions() -> dict[str, Any]:
         },
         "2gis": {
             "title": "2GIS",
-            "description": "Поисковый парсер 2GIS с выбором места запуска: сервер или домашний worker.",
+            "description": "Поисковый парсер 2GIS с запуском Chrome и записью данных в PostgreSQL.",
             "output_ext": "json",
             "fields": [
                 {"name": "search_url", "label": "Ссылка поиска 2GIS", "type": "url", "required": True, "default": "https://2gis.ru/almaty/search/аптека"},
                 {"name": "max_records", "label": "Максимум записей", "type": "number", "required": True, "default": 100},
-                {
-                    "name": "run_location",
-                    "label": "Где запускать 2GIS",
-                    "type": "select",
-                    "required": True,
-                    "default": "home_worker",
-                    "options": ["home_worker", "server"],
-                },
                 {"name": "output_name", "label": "Имя файла", "type": "text", "required": False, "default": ""},
                 {"name": "format", "label": "Формат", "type": "select", "required": True, "default": "xlsx", "options": ["xlsx", "csv", "json"]},
                 {"name": "start_maximized", "label": "Стартовать окно развёрнутым", "type": "checkbox", "required": False, "default": True},
@@ -795,25 +678,6 @@ class AppHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
-        if parsed.path == "/api/worker/2gis/next":
-            if not self._is_worker_authorized():
-                self._send_json({"error": "Worker unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
-                return
-            worker_id = self.headers.get("X-Worker-Id", "").strip() or "2gis-home-worker"
-            job = JOB_MANAGER.claim_remote_job("2gis", worker_id)
-            if not job:
-                self._send_json({"job": None})
-                return
-            self._send_json(
-                {
-                    "job": {
-                        "job_id": job.job_id,
-                        "parser_key": job.parser_key,
-                        "payload": job.raw_payload,
-                    }
-                }
-            )
-            return
         if parsed.path == "/api/config":
             self._send_json({"parsers": parser_definitions()})
             return
@@ -840,50 +704,6 @@ class AppHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
-        if parsed.path.startswith("/api/worker/2gis/"):
-            if not self._is_worker_authorized():
-                self._send_json({"error": "Worker unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
-                return
-            parts = parsed.path.strip("/").split("/")
-            if len(parts) != 5:
-                self._send_json({"error": "Bad request"}, status=HTTPStatus.BAD_REQUEST)
-                return
-            job_id = parts[3]
-            action = parts[4]
-            body = self._read_json()
-            if body is None:
-                return
-            if action == "log":
-                lines = body.get("lines", [])
-                if isinstance(lines, str):
-                    lines = [lines]
-                if not isinstance(lines, list):
-                    self._send_json({"error": "lines must be list[str]"}, status=HTTPStatus.BAD_REQUEST)
-                    return
-                job = JOB_MANAGER.append_remote_log(job_id, [str(x) for x in lines])
-                if not job:
-                    self._send_json({"error": "Job not found"}, status=HTTPStatus.NOT_FOUND)
-                    return
-                self._send_json({"ok": True})
-                return
-            if action == "finish":
-                return_code = int(body.get("return_code", 1))
-                status = str(body.get("status", "")).strip().lower() or None
-                output_path = str(body.get("output_path", "")).strip()
-                job = JOB_MANAGER.complete_remote_job(
-                    job_id=job_id,
-                    return_code=return_code,
-                    status=status,
-                    output_path=output_path,
-                )
-                if not job:
-                    self._send_json({"error": "Job not found"}, status=HTTPStatus.NOT_FOUND)
-                    return
-                self._send_json({"job": job.snapshot()})
-                return
-            self._send_json({"error": "Unknown worker action"}, status=HTTPStatus.BAD_REQUEST)
-            return
-
         if parsed.path == "/api/run":
             payload = self._read_json()
             if payload is None:
@@ -896,23 +716,7 @@ class AppHandler(BaseHTTPRequestHandler):
             except Exception as exc:  # noqa: BLE001
                 self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
                 return
-            run_location = str(cleaned.get("run_location", "server")).strip().lower()
-            if parser_key == "2gis" and run_location == "home_worker":
-                job = JOB_MANAGER.create_remote_job(
-                    parser_key=parser_key,
-                    payload=cleaned,
-                    output_path=output_path,
-                    run_mode="home_worker",
-                )
-                JOB_MANAGER.append_remote_log(
-                    job.job_id,
-                    [
-                        "[hub] Job queued for home worker.",
-                        "[hub] Start local worker: ./venv/bin/python parsers_hub/home_worker_2gis.py --server-url http://<server>:8090 --token <token>",
-                    ],
-                )
-            else:
-                job = JOB_MANAGER.create_job(parser_key, command, cwd, output_path)
+            job = JOB_MANAGER.create_job(parser_key, command, cwd, output_path)
             self._send_json({"job": job.snapshot()}, status=HTTPStatus.CREATED)
             return
 
@@ -968,12 +772,6 @@ class AppHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format: str, *args: Any) -> None:
         return
-
-    def _is_worker_authorized(self) -> bool:
-        if not WORKER_TOKEN:
-            return False
-        header_token = self.headers.get("X-Worker-Token", "").strip()
-        return bool(header_token) and header_token == WORKER_TOKEN
 
     def _read_json(self) -> dict[str, Any] | None:
         try:
