@@ -103,6 +103,7 @@ def parse_arguments() -> tuple[argparse.Namespace, Configuration]:
 
     browser_parser = arg_parser.add_argument_group('Аргументы браузера')
     browser_parser.add_argument('--chrome.binary_path', metavar='PATH', help='Путь до исполняемого файла браузера. Если не указан, то определяется автоматически')
+    browser_parser.add_argument('--chrome.user-agent', metavar='VALUE', help='User-Agent для запросов браузера')
     browser_parser.add_argument('--chrome.disable-images', metavar='{yes,no}', help='Отключить изображения в браузере')
     browser_parser.add_argument('--chrome.headless', metavar='{yes,no}', help='Скрыть браузер')
     browser_parser.add_argument('--chrome.silent-browser', metavar='{yes,no}', help='Отключить отладочную информацию браузера')
