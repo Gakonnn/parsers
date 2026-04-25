@@ -108,8 +108,6 @@ def parse_arguments() -> tuple[argparse.Namespace, Configuration]:
     browser_parser.add_argument('--chrome.silent-browser', metavar='{yes,no}', help='Отключить отладочную информацию браузера')
     browser_parser.add_argument('--chrome.start-maximized', metavar='{yes,no}', help='Запустить окно браузера развёрнутым')
     browser_parser.add_argument('--chrome.memory-limit', metavar='{4096,5120,...}', help='Лимит оперативной памяти браузера (мегабайт)')
-    browser_parser.add_argument('--chrome.proxy-server', metavar='URL', help='Прокси-сервер для исходящего трафика Chrome, например socks5://user:pass@host:port')
-    browser_parser.add_argument('--chrome.proxy-bypass-list', metavar='LIST', help='Список исключений для прокси Chrome, например localhost;127.0.0.1')
 
     csv_parser = arg_parser.add_argument_group('Аргументы CSV/XLSX')
     csv_parser.add_argument('--writer.csv.add-rubrics', metavar='{yes,no}', help='Добавить колонку "Рубрики"')

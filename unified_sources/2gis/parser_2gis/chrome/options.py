@@ -32,5 +32,3 @@ class ChromeOptions(BaseModel):
     disable_images: bool = True
     silent_browser: bool = True
     memory_limit: PositiveInt = default_memory_limit()
-    proxy_server: Optional[str] = None
-    proxy_bypass_list: Optional[str] = None

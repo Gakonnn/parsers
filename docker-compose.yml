@@ -49,8 +49,6 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       CHROME_BINARY: /usr/bin/chromium
       CHROMIUM_BINARY: /usr/bin/chromium
-      PARSERS_2GIS_PROXY_SERVER: ${PARSERS_2GIS_PROXY_SERVER:-}
-      PARSERS_2GIS_PROXY_BYPASS_LIST: ${PARSERS_2GIS_PROXY_BYPASS_LIST:-}
       TZ: ${TZ:-Asia/Almaty}
     ports:
       - "${PARSERS_HUB_PORT:-8090}:8090"
