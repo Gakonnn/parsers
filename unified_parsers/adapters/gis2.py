@@ -21,7 +21,6 @@ class Gis2Adapter(SourceAdapter):
         )
         parser.add_argument("--max-records", type=int, default=100, help="Maximum records")
         parser.add_argument("--format", choices=["xlsx", "csv", "json"], default="xlsx", help="Output format")
-        parser.add_argument("--user-agent", default="", help="Custom User-Agent for 2GIS browser requests")
         parser.add_argument(
             "--start-maximized",
             dest="start_maximized",
@@ -89,10 +88,6 @@ class Gis2Adapter(SourceAdapter):
             headless_env = "yes"
         if headless_env in {"1", "true", "yes", "on"}:
             command.extend(["--chrome.headless", "yes"])
-
-        user_agent = str(getattr(args, "user_agent", "")).strip() or os.environ.get("PARSERS_2GIS_USER_AGENT", "").strip()
-        if user_agent:
-            command.extend(["--chrome.user-agent", user_agent])
 
         return command
 

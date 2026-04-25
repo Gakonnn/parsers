@@ -27,7 +27,6 @@ class ChromeOptions(BaseModel):
         memory_size: Max V8's memory size.
     """
     binary_path: Optional[pathlib.Path] = None
-    user_agent: str = ""
     start_maximized: bool = False
     headless: bool = False
     disable_images: bool = True

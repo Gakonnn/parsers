@@ -83,14 +83,10 @@ class ChromeRemote:
 
     def _setup_tab(self) -> None:
         """Hide webdriver, enable requests/response interception, fix UA."""
-        # Force explicit UA when provided, otherwise remove "Headless" marker.
-        custom_useragent = (self._chrome_options.user_agent or '').strip()
-        if custom_useragent:
-            self._chrome_tab.Network.setUserAgentOverride(userAgent=custom_useragent)
-        else:
-            original_useragent = self.execute_script('navigator.userAgent')
-            fixed_useragent = original_useragent.replace('Headless', '')
-            self._chrome_tab.Network.setUserAgentOverride(userAgent=fixed_useragent)
+        # Fix user agent for headless browser
+        original_useragent = self.execute_script('navigator.userAgent')
+        fixed_useragent = original_useragent.replace('Headless', '')
+        self._chrome_tab.Network.setUserAgentOverride(userAgent=fixed_useragent)
 
         # Hide webdriver traces
         self.add_start_script(r'''
