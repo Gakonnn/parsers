@@ -8,6 +8,7 @@ import signal
 import subprocess
 import threading
 import uuid
+from base64 import b64decode
 from dataclasses import dataclass, field
 from datetime import datetime
 from http import HTTPStatus
@@ -34,6 +35,7 @@ KRISHA_DIR = UNIFIED_SOURCES_DIR / "krisha"
 DEFAULT_PYTHON_BIN = Path(os.environ.get("PARSERS_PYTHON_BIN", "").strip() or str(OLX_DIR / "venv/bin/python"))
 DEFAULT_DATABASE_URL = os.environ.get("PARSERS_HUB_DATABASE_URL", "postgresql://gakon@127.0.0.1:55432/parsers")
 DEFAULT_HEADLESS = os.environ.get("PARSERS_DEFAULT_HEADLESS", "true").strip().lower() in {"1", "true", "yes", "on"}
+PARSERS_AGENT_TOKEN = os.environ.get("PARSERS_AGENT_TOKEN", "").strip()
 
 
 def resolve_python_bin(source_dir: Path) -> str:
@@ -324,6 +326,169 @@ class JobManager:
 JOB_MANAGER = JobManager()
 
 
+@dataclass
+class AgentJob:
+    job_id: str
+    parser_key: str
+    payload: dict[str, Any]
+    created_at: str
+    status: str = "queued"
+    return_code: int | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+    output_path: str = ""
+    cwd: str = "agent://remote"
+    command: list[str] = field(default_factory=list)
+    log_lines: list[str] = field(default_factory=list)
+    agent_id: str = ""
+    error: str = ""
+    stop_requested: bool = False
+    snapshots: list[str] = field(default_factory=list)
+    last_snapshot_at: str | None = None
+
+    def snapshot(self) -> dict[str, Any]:
+        return {
+            "job_id": self.job_id,
+            "parser_key": self.parser_key,
+            "command": self.command,
+            "cwd": self.cwd,
+            "output_path": self.output_path,
+            "created_at": self.created_at,
+            "started_at": self.started_at,
+            "finished_at": self.finished_at,
+            "status": self.status,
+            "return_code": self.return_code,
+            "stop_requested": self.stop_requested,
+            "snapshots": self.snapshots[-30:],
+            "last_snapshot_at": self.last_snapshot_at,
+            "log": "".join(self.log_lines[-400:]),
+            "agent_id": self.agent_id,
+            "error": self.error,
+        }
+
+
+class AgentJobManager:
+    def __init__(self) -> None:
+        self._jobs: dict[str, AgentJob] = {}
+        self._lock = threading.Lock()
+
+    def create_job(self, parser_key: str, payload: dict[str, Any]) -> AgentJob:
+        job = AgentJob(
+            job_id=f"ag_{uuid.uuid4().hex[:10]}",
+            parser_key=parser_key,
+            payload=payload,
+            created_at=utc_now(),
+            command=["agent://2gis", payload.get("search_url", "")],
+        )
+        with self._lock:
+            self._jobs[job.job_id] = job
+        return job
+
+    def list_jobs(self) -> list[dict[str, Any]]:
+        with self._lock:
+            jobs = [job.snapshot() for job in self._jobs.values()]
+        return sorted(jobs, key=lambda item: item["created_at"], reverse=True)
+
+    def get_job(self, job_id: str) -> AgentJob | None:
+        with self._lock:
+            return self._jobs.get(job_id)
+
+    def stop_job(self, job_id: str) -> AgentJob | None:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if not job:
+                return None
+            if job.status in {"completed", "failed", "stopped"}:
+                return None
+            job.stop_requested = True
+            if job.status == "queued":
+                job.status = "stopped"
+                job.finished_at = utc_now()
+            return job
+
+    def claim_next(self, agent_id: str) -> AgentJob | None:
+        with self._lock:
+            for job in sorted(self._jobs.values(), key=lambda item: item.created_at):
+                if job.status != "queued":
+                    continue
+                if job.stop_requested:
+                    job.status = "stopped"
+                    job.finished_at = utc_now()
+                    continue
+                job.status = "running"
+                job.started_at = utc_now()
+                job.agent_id = agent_id
+                job.log_lines.append(f"[agent] Claimed by {agent_id}\n")
+                return job
+        return None
+
+    def append_log(self, job_id: str, agent_id: str, lines: list[str]) -> AgentJob | None:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if not job or job.agent_id != agent_id:
+                return None
+            for line in lines:
+                job.log_lines.append(str(line))
+            if len(job.log_lines) > 2000:
+                job.log_lines = job.log_lines[-2000:]
+            return job
+
+    def complete_job(
+        self,
+        job_id: str,
+        agent_id: str,
+        return_code: int,
+        output_name: str,
+        output_b64: str,
+        logs: list[str] | None = None,
+        error: str = "",
+    ) -> AgentJob | None:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if not job or job.agent_id != agent_id:
+                return None
+            if logs:
+                for line in logs:
+                    job.log_lines.append(str(line))
+            if len(job.log_lines) > 2000:
+                job.log_lines = job.log_lines[-2000:]
+
+        saved_path = ""
+        if output_b64:
+            try:
+                raw = b64decode(output_b64.encode("utf-8"), validate=True)
+                out_dir = ensure_runs_dir(job.parser_key)
+                safe_name = output_name.strip() or f"{job.job_id}_data.bin"
+                safe_name = safe_name.replace("/", "_")
+                dst = out_dir / safe_name
+                dst.write_bytes(raw)
+                saved_path = str(dst)
+            except Exception:
+                error = error or "Failed to decode output file from agent."
+
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if not job:
+                return None
+            job.return_code = int(return_code)
+            job.finished_at = utc_now()
+            if saved_path:
+                job.output_path = saved_path
+            job.error = error
+            if job.stop_requested:
+                job.status = "stopped"
+            elif return_code == 0 and not error:
+                job.status = "completed"
+            else:
+                job.status = "failed"
+            if error:
+                job.log_lines.append(f"[agent] ERROR: {error}\n")
+            return job
+
+
+AGENT_JOB_MANAGER = AgentJobManager()
+
+
 def utc_now() -> str:
     return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
@@ -361,6 +526,7 @@ def parser_definitions() -> dict[str, Any]:
                 {"name": "output_name", "label": "Имя файла", "type": "text", "required": False, "default": ""},
                 {"name": "format", "label": "Формат", "type": "select", "required": True, "default": "xlsx", "options": ["xlsx", "csv", "json"]},
                 {"name": "start_maximized", "label": "Стартовать окно развёрнутым", "type": "checkbox", "required": False, "default": True},
+                {"name": "run_via_agent", "label": "Запускать через mini-агент (ПК пользователя)", "type": "checkbox", "required": False, "default": False},
                 {"name": "database_url", "label": "PostgreSQL URL", "type": "text", "required": False, "default": DEFAULT_DATABASE_URL},
             ],
         },
@@ -690,13 +856,19 @@ class AppHandler(BaseHTTPRequestHandler):
             self._send_json(result)
             return
         if parsed.path == "/api/jobs":
-            self._send_json({"jobs": JOB_MANAGER.list_jobs()})
+            jobs = JOB_MANAGER.list_jobs() + AGENT_JOB_MANAGER.list_jobs()
+            jobs_sorted = sorted(jobs, key=lambda item: item["created_at"], reverse=True)
+            self._send_json({"jobs": jobs_sorted})
             return
         if parsed.path.startswith("/api/jobs/"):
             job_id = parsed.path.rsplit("/", 1)[-1]
             job = JOB_MANAGER.get_job(job_id)
             if not job:
-                self._send_json({"error": "Job not found"}, status=HTTPStatus.NOT_FOUND)
+                agent_job = AGENT_JOB_MANAGER.get_job(job_id)
+                if not agent_job:
+                    self._send_json({"error": "Job not found"}, status=HTTPStatus.NOT_FOUND)
+                    return
+                self._send_json(agent_job.snapshot())
                 return
             self._send_json(job.snapshot())
             return
@@ -712,6 +884,10 @@ class AppHandler(BaseHTTPRequestHandler):
             form_data = payload.get("payload", {})
             try:
                 cleaned = validate_payload(parser_key, form_data)
+                if parser_key == "2gis" and cleaned.get("run_via_agent", False):
+                    job = AGENT_JOB_MANAGER.create_job(parser_key, cleaned)
+                    self._send_json({"job": job.snapshot()}, status=HTTPStatus.CREATED)
+                    return
                 command, cwd, output_path = COMMAND_BUILDERS[parser_key](cleaned)
             except Exception as exc:  # noqa: BLE001
                 self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
@@ -719,6 +895,79 @@ class AppHandler(BaseHTTPRequestHandler):
             job = JOB_MANAGER.create_job(parser_key, command, cwd, output_path)
             self._send_json({"job": job.snapshot()}, status=HTTPStatus.CREATED)
             return
+
+        if parsed.path == "/api/agent/next":
+            payload = self._read_json()
+            if payload is None:
+                return
+            if not self._validate_agent_token(payload):
+                self._send_json({"error": "Forbidden"}, status=HTTPStatus.FORBIDDEN)
+                return
+            agent_id = str(payload.get("agent_id", "")).strip() or "agent"
+            job = AGENT_JOB_MANAGER.claim_next(agent_id)
+            if not job:
+                self._send_json({"job": None})
+                return
+            self._send_json(
+                {
+                    "job": {
+                        "job_id": job.job_id,
+                        "parser_key": job.parser_key,
+                        "payload": job.payload,
+                        "created_at": job.created_at,
+                    }
+                }
+            )
+            return
+
+        if parsed.path.startswith("/api/agent/jobs/"):
+            payload = self._read_json()
+            if payload is None:
+                return
+            if not self._validate_agent_token(payload):
+                self._send_json({"error": "Forbidden"}, status=HTTPStatus.FORBIDDEN)
+                return
+            parts = parsed.path.strip("/").split("/")
+            if len(parts) != 5:
+                self._send_json({"error": "Bad request"}, status=HTTPStatus.BAD_REQUEST)
+                return
+            job_id = parts[3]
+            action = parts[4]
+            agent_id = str(payload.get("agent_id", "")).strip() or "agent"
+
+            if action == "log":
+                lines = payload.get("lines", [])
+                if not isinstance(lines, list):
+                    lines = [str(lines)]
+                job = AGENT_JOB_MANAGER.append_log(job_id, agent_id, [str(x) for x in lines])
+                if not job:
+                    self._send_json({"error": "Job not found"}, status=HTTPStatus.NOT_FOUND)
+                    return
+                self._send_json({"ok": True})
+                return
+
+            if action == "complete":
+                return_code = int(payload.get("return_code", 1))
+                output_name = str(payload.get("output_name", "")).strip()
+                output_b64 = str(payload.get("output_b64", "")).strip()
+                logs = payload.get("logs", [])
+                if not isinstance(logs, list):
+                    logs = []
+                error = str(payload.get("error", "")).strip()
+                job = AGENT_JOB_MANAGER.complete_job(
+                    job_id=job_id,
+                    agent_id=agent_id,
+                    return_code=return_code,
+                    output_name=output_name,
+                    output_b64=output_b64,
+                    logs=[str(x) for x in logs],
+                    error=error,
+                )
+                if not job:
+                    self._send_json({"error": "Job not found"}, status=HTTPStatus.NOT_FOUND)
+                    return
+                self._send_json({"job": job.snapshot()})
+                return
 
         if parsed.path.startswith("/api/jobs/"):
             parts = parsed.path.strip("/").split("/")
@@ -731,7 +980,11 @@ class AppHandler(BaseHTTPRequestHandler):
             if action == "stop":
                 job = JOB_MANAGER.stop_job(job_id)
                 if not job:
-                    self._send_json({"error": "Job not found or not stoppable"}, status=HTTPStatus.NOT_FOUND)
+                    remote_job = AGENT_JOB_MANAGER.stop_job(job_id)
+                    if not remote_job:
+                        self._send_json({"error": "Job not found or not stoppable"}, status=HTTPStatus.NOT_FOUND)
+                        return
+                    self._send_json({"job": remote_job.snapshot()})
                     return
                 self._send_json({"job": job.snapshot()})
                 return
@@ -781,6 +1034,13 @@ class AppHandler(BaseHTTPRequestHandler):
         except Exception:  # noqa: BLE001
             self._send_json({"error": "Invalid JSON"}, status=HTTPStatus.BAD_REQUEST)
             return None
+
+    @staticmethod
+    def _validate_agent_token(payload: dict[str, Any]) -> bool:
+        if not PARSERS_AGENT_TOKEN:
+            return True
+        token = str(payload.get("token", "")).strip()
+        return bool(token) and token == PARSERS_AGENT_TOKEN
 
     def _serve_static(self, path: str) -> None:
         if path in {"/", ""}:
