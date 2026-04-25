@@ -49,7 +49,6 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       CHROME_BINARY: /usr/bin/chromium
       CHROMIUM_BINARY: /usr/bin/chromium
-      SELENIUM_REMOTE_URL: http://selenium:4444/wd/hub
       TZ: ${TZ:-Asia/Almaty}
     ports:
       - "${PARSERS_HUB_PORT:-8090}:8090"
