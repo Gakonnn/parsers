@@ -49,6 +49,14 @@ class ChromeBrowser():
             self._chrome_cmd.append('--headless')
             self._chrome_cmd.append('--disable-gpu')
 
+        if chrome_options.proxy_server:
+            logger.debug('В Chrome установлен proxy server: %s', chrome_options.proxy_server)
+            self._chrome_cmd.append(f'--proxy-server={chrome_options.proxy_server}')
+
+        if chrome_options.proxy_bypass_list:
+            logger.debug('В Chrome установлен proxy bypass list: %s', chrome_options.proxy_bypass_list)
+            self._chrome_cmd.append(f'--proxy-bypass-list={chrome_options.proxy_bypass_list}')
+
         if chrome_options.disable_images:
             logger.debug('В Chrome отключены изображения.')
             self._chrome_cmd.append('--blink-settings=imagesEnabled=false')

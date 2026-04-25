@@ -34,6 +34,8 @@ KRISHA_DIR = UNIFIED_SOURCES_DIR / "krisha"
 DEFAULT_PYTHON_BIN = Path(os.environ.get("PARSERS_PYTHON_BIN", "").strip() or str(OLX_DIR / "venv/bin/python"))
 DEFAULT_DATABASE_URL = os.environ.get("PARSERS_HUB_DATABASE_URL", "postgresql://gakon@127.0.0.1:55432/parsers")
 DEFAULT_HEADLESS = os.environ.get("PARSERS_DEFAULT_HEADLESS", "true").strip().lower() in {"1", "true", "yes", "on"}
+DEFAULT_2GIS_PROXY_SERVER = os.environ.get("PARSERS_2GIS_PROXY_SERVER", "").strip()
+DEFAULT_2GIS_PROXY_BYPASS_LIST = os.environ.get("PARSERS_2GIS_PROXY_BYPASS_LIST", "").strip()
 
 
 def resolve_python_bin(source_dir: Path) -> str:
@@ -361,6 +363,9 @@ def parser_definitions() -> dict[str, Any]:
                 {"name": "output_name", "label": "Имя файла", "type": "text", "required": False, "default": ""},
                 {"name": "format", "label": "Формат", "type": "select", "required": True, "default": "xlsx", "options": ["xlsx", "csv", "json"]},
                 {"name": "start_maximized", "label": "Стартовать окно развёрнутым", "type": "checkbox", "required": False, "default": True},
+                {"name": "use_residential_proxy", "label": "Использовать residential proxy (только 2GIS)", "type": "checkbox", "required": False, "default": bool(DEFAULT_2GIS_PROXY_SERVER)},
+                {"name": "proxy_server", "label": "Proxy server URL", "type": "text", "required": False, "default": DEFAULT_2GIS_PROXY_SERVER},
+                {"name": "proxy_bypass_list", "label": "Proxy bypass list", "type": "text", "required": False, "default": DEFAULT_2GIS_PROXY_BYPASS_LIST},
                 {"name": "database_url", "label": "PostgreSQL URL", "type": "text", "required": False, "default": DEFAULT_DATABASE_URL},
             ],
         },
@@ -448,6 +453,16 @@ def build_2gis_command(payload: dict[str, Any]) -> tuple[list[str], Path, Path]:
         command.append("--start-maximized")
     else:
         command.append("--no-start-maximized")
+
+    use_residential_proxy = bool(payload.get("use_residential_proxy", False))
+    if use_residential_proxy:
+        proxy_server = (payload.get("proxy_server", "") or DEFAULT_2GIS_PROXY_SERVER).strip()
+        proxy_bypass_list = (payload.get("proxy_bypass_list", "") or DEFAULT_2GIS_PROXY_BYPASS_LIST).strip()
+        if proxy_server:
+            command.extend(["--proxy-server", proxy_server])
+        if proxy_bypass_list:
+            command.extend(["--proxy-bypass-list", proxy_bypass_list])
+
     if database_url:
         command.extend(["--database-url", database_url])
     return command, OLX_DIR, output_path

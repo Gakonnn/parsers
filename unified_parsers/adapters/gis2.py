@@ -33,6 +33,16 @@ class Gis2Adapter(SourceAdapter):
             action="store_false",
             help="Do not maximize browser window on start",
         )
+        parser.add_argument(
+            "--proxy-server",
+            default="",
+            help="Proxy server for 2GIS Chrome traffic only (example: socks5://user:pass@host:port)",
+        )
+        parser.add_argument(
+            "--proxy-bypass-list",
+            default="",
+            help="Proxy bypass list for Chrome (example: localhost;127.0.0.1)",
+        )
         parser.add_argument("--output", default="unified_2gis_results.xlsx", help="Output file path")
         parser.set_defaults(start_maximized=True)
 
@@ -88,6 +98,13 @@ class Gis2Adapter(SourceAdapter):
             headless_env = "yes"
         if headless_env in {"1", "true", "yes", "on"}:
             command.extend(["--chrome.headless", "yes"])
+
+        proxy_server = str(getattr(args, "proxy_server", "") or "").strip()
+        if proxy_server:
+            command.extend(["--chrome.proxy-server", proxy_server])
+        proxy_bypass_list = str(getattr(args, "proxy_bypass_list", "") or "").strip()
+        if proxy_bypass_list:
+            command.extend(["--chrome.proxy-bypass-list", proxy_bypass_list])
 
         return command
 
