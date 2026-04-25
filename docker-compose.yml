@@ -49,6 +49,7 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       CHROME_BINARY: /usr/bin/chromium
       CHROMIUM_BINARY: /usr/bin/chromium
+      PARSERS_WORKER_TOKEN: ${PARSERS_WORKER_TOKEN:-}
       TZ: ${TZ:-Asia/Almaty}
     ports:
       - "${PARSERS_HUB_PORT:-8090}:8090"
