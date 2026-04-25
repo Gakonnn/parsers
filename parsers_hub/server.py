@@ -353,11 +353,12 @@ def parser_definitions() -> dict[str, Any]:
         },
         "2gis": {
             "title": "2GIS",
-            "description": "Поисковый парсер 2GIS с запуском Chrome и записью данных в PostgreSQL.",
+            "description": "Парсер 2GIS: стандартный режим (API) или Selenium+HTML (эксперимент).",
             "output_ext": "json",
             "fields": [
                 {"name": "search_url", "label": "Ссылка поиска 2GIS", "type": "url", "required": True, "default": "https://2gis.ru/almaty/search/аптека"},
                 {"name": "max_records", "label": "Максимум записей", "type": "number", "required": True, "default": 100},
+                {"name": "selenium_html", "label": "Selenium + HTML (эксперимент)", "type": "checkbox", "required": False, "default": True},
                 {"name": "output_name", "label": "Имя файла", "type": "text", "required": False, "default": ""},
                 {"name": "format", "label": "Формат", "type": "select", "required": True, "default": "xlsx", "options": ["xlsx", "csv", "json"]},
                 {"name": "start_maximized", "label": "Стартовать окно развёрнутым", "type": "checkbox", "required": False, "default": True},
@@ -448,6 +449,8 @@ def build_2gis_command(payload: dict[str, Any]) -> tuple[list[str], Path, Path]:
         command.append("--start-maximized")
     else:
         command.append("--no-start-maximized")
+    if payload.get("selenium_html", False):
+        command.append("--selenium-html")
     if database_url:
         command.extend(["--database-url", database_url])
     return command, OLX_DIR, output_path

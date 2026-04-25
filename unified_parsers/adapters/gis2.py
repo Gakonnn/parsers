@@ -34,6 +34,11 @@ class Gis2Adapter(SourceAdapter):
             help="Do not maximize browser window on start",
         )
         parser.add_argument("--output", default="unified_2gis_results.xlsx", help="Output file path")
+        parser.add_argument(
+            "--selenium-html",
+            action="store_true",
+            help="Use experimental Selenium HTML parser instead of parser-2gis API mode",
+        )
         parser.set_defaults(start_maximized=True)
 
     def output_path(self, args: Namespace, project_root: Path) -> Path:
@@ -55,6 +60,31 @@ class Gis2Adapter(SourceAdapter):
 
         output_path = self.output_path(args, project_root)
         output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if bool(getattr(args, "selenium_html", False)):
+            command = [
+                str(python_bin),
+                "selenium_html_parser.py",
+                "--search-url",
+                str(args.search_url),
+                "--max-records",
+                str(max(1, int(args.max_records))),
+                "--format",
+                str(args.format),
+                "--output",
+                str(output_path),
+            ]
+            remote_url = os.environ.get("SELENIUM_REMOTE_URL", "").strip()
+            if remote_url:
+                command.extend(["--remote-url", remote_url])
+            headless_env = os.environ.get("PARSERS_2GIS_HEADLESS", "").strip().lower()
+            if not headless_env and Path("/.dockerenv").exists():
+                headless_env = "yes"
+            if headless_env in {"1", "true", "yes", "on"}:
+                command.extend(["--headless", "yes"])
+            else:
+                command.extend(["--headless", "no"])
+            return command
 
         command = [
             str(python_bin),
