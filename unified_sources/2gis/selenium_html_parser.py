@@ -38,7 +38,7 @@ def parse_args() -> argparse.Namespace:
         default=os.environ.get("SELENIUM_REMOTE_URL", "").strip(),
         help="Optional Selenium remote URL",
     )
-    parser.add_argument("--timeout", type=float, default=40.0, help="Wait timeout in seconds")
+    parser.add_argument("--timeout", type=float, default=25.0, help="Wait timeout in seconds")
     parser.add_argument("--scroll-steps", type=int, default=18, help="Number of page scroll steps")
     parser.add_argument("--scroll-delay", type=float, default=0.7, help="Delay between scrolls")
     return parser.parse_args()
@@ -46,7 +46,6 @@ def parse_args() -> argparse.Namespace:
 
 def make_driver(headless: bool, remote_url: str) -> webdriver.Chrome:
     options = Options()
-    options.page_load_strategy = "eager"
     if headless:
         options.add_argument("--headless=new")
     options.add_argument("--disable-dev-shm-usage")
@@ -162,16 +161,8 @@ def main() -> int:
     driver: webdriver.Chrome | None = None
     try:
         driver = make_driver(headless=headless, remote_url=args.remote_url)
-        driver.set_page_load_timeout(max(15, int(args.timeout)))
-        try:
-            driver.get(args.search_url)
-        except TimeoutException:
-            # 2GIS may keep long-running map/network streams; continue with partially loaded DOM.
-            try:
-                driver.execute_script("window.stop();")
-            except Exception:
-                pass
-            print("[2gis-html] Page load timeout reached, continuing with partial DOM.")
+        driver.set_page_load_timeout(max(10, int(args.timeout)))
+        driver.get(args.search_url)
         rows = collect_records(
             driver=driver,
             max_records=max_records,
