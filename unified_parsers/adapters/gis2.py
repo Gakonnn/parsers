@@ -28,6 +28,12 @@ class Gis2Adapter(SourceAdapter):
         parser.add_argument("--format", choices=["xlsx", "csv", "json"], default="xlsx", help="Output format")
         parser.add_argument("--user-agent", default="", help="Custom User-Agent for 2GIS browser requests")
         parser.add_argument(
+            "--http-provider",
+            choices=["off", "direct", "crawlbase", "scraperapi", "auto"],
+            default="auto",
+            help="Fallback HTTP provider for blocked 2GIS API requests",
+        )
+        parser.add_argument(
             "--start-maximized",
             dest="start_maximized",
             action="store_true",
