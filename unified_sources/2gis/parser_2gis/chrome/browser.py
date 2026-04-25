@@ -38,11 +38,8 @@ class ChromeBrowser():
             f'--user-data-dir={self._profile_path}', '--no-default-browser-check',
             '--no-first-run', '--no-sandbox', '--disable-fre',
             '--remote-allow-origins=*',
-            '--lang=ru-RU',
             f'--js-flags=--expose-gc --max-old-space-size={chrome_options.memory_limit}',
         ]
-        if chrome_options.user_agent:
-            self._chrome_cmd.append(f'--user-agent={chrome_options.user_agent}')
 
         if chrome_options.start_maximized:
             self._chrome_cmd.append('--start-maximized')

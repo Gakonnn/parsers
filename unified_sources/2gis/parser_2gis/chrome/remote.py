@@ -91,10 +91,6 @@ class ChromeRemote:
             original_useragent = self.execute_script('navigator.userAgent')
             fixed_useragent = original_useragent.replace('Headless', '')
             self._chrome_tab.Network.setUserAgentOverride(userAgent=fixed_useragent)
-        # Keep locale/profile headers browser-like to reduce bot filtering.
-        self._chrome_tab.Network.setExtraHTTPHeaders(headers={
-            'Accept-Language': self._chrome_options.accept_language
-        })
 
         # Hide webdriver traces
         self.add_start_script(r'''
