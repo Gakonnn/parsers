@@ -6,6 +6,7 @@ __pycache__
 venv/
 .parsed
 *.xlsx
+!Data.2gis_рубрики.xlsx
 *.csv
 *.json
 parsers_hub/runs/
