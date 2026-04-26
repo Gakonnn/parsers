@@ -146,6 +146,30 @@ class MainParser:
                 return link
         return None
 
+    @wait_until_finished(timeout=25, throw_exception=False)
+    def _wait_initial_links_ready(self) -> bool:
+        """Wait until the search page has real organization links.
+
+        On cold Chrome starts 2GIS can render the shell before catalog data and
+        auth state are fully ready. Starting clicks too early causes stale or
+        missing catalog responses, so we wait for a usable result list first.
+        """
+        return bool(self._get_links())
+
+    def _prewarm_search_page(self) -> None:
+        """Let 2GIS finish its initial catalog bootstrap before item clicks."""
+        links_ready = self._wait_initial_links_ready()
+        if not links_ready:
+            logger.warning('Не удалось дождаться первичной загрузки ссылок 2GIS, продолжаю.')
+            return
+
+        # Consume the initial search/list catalog response if it is still
+        # buffered, then clear stale responses so the first click waits only
+        # for its own organization-card response.
+        self._chrome_remote.wait_response(self._item_response_pattern)
+        if hasattr(self._chrome_remote, 'clear_response_queue'):
+            self._chrome_remote.clear_response_queue(self._item_response_pattern)
+
     @staticmethod
     def _valid_catalog_document(doc: dict) -> bool:
         """Check that response payload contains an organization card."""
@@ -225,6 +249,8 @@ class MainParser:
 
             if self._options.skip_404_response:
                 return
+
+        self._prewarm_search_page()
 
         # Parsed records
         collected_records = 0
