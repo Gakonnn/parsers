@@ -264,7 +264,8 @@ class MainParser:
                     doc = None
                     for _ in range(3):  # 3 attempts to get response
                         # Drop stale buffered responses before current click.
-                        self._chrome_remote.clear_response_queue(self._item_response_pattern)
+                        if hasattr(self._chrome_remote, 'clear_response_queue'):
+                            self._chrome_remote.clear_response_queue(self._item_response_pattern)
 
                         link = self._find_link_by_href(link_href)
                         if link is None:
