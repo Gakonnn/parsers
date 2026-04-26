@@ -72,6 +72,8 @@ class Gis2Adapter(SourceAdapter):
         ]
 
         chrome_binary = os.environ.get("PARSERS_2GIS_BINARY", "").strip()
+        if not chrome_binary and Path("/usr/bin/chromium").exists():
+            chrome_binary = "/usr/bin/chromium"
         if chrome_binary:
             command.extend(["--chrome.binary_path", chrome_binary])
 
