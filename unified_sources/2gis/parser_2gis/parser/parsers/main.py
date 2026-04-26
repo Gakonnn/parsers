@@ -163,10 +163,10 @@ class MainParser:
             logger.warning('Не удалось дождаться первичной загрузки ссылок 2GIS, продолжаю.')
             return
 
-        # Consume the initial search/list catalog response if it is still
-        # buffered, then clear stale responses so the first click waits only
-        # for its own organization-card response.
-        self._chrome_remote.wait_response(self._item_response_pattern)
+        # Let initial XHR requests settle, then drop stale buffered catalog
+        # responses so the first click waits only for its own card response.
+        self._wait_requests_finished()
+        self._chrome_remote.wait(0.5)
         if hasattr(self._chrome_remote, 'clear_response_queue'):
             self._chrome_remote.clear_response_queue(self._item_response_pattern)
 
@@ -264,12 +264,19 @@ class MainParser:
         @wait_until_finished(timeout=10, throw_exception=False)
         def get_unique_links() -> list[DOMNode]:
             links = self._get_links()
-            link_addresses = set(x.attributes['href'] for x in links)
+            unique_links: list[DOMNode] = []
+            link_addresses = set()
+            for link in links:
+                href = link.attributes['href']
+                if href in link_addresses:
+                    continue
+                unique_links.append(link)
+                link_addresses.add(href)
             if link_addresses & visited_links:
                 return []
 
             visited_links.update(link_addresses)
-            return links
+            return unique_links
 
         consecutive_skips = 0
 
