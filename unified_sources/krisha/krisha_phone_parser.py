@@ -203,6 +203,7 @@ DIRECT_PROXY = "__DIRECT__"
 DEFAULT_LISTING_URL = "https://krisha.kz/prodazha/kvartiry/"
 DEFAULT_CHROME_USER_DATA_DIR = str(Path.home() / "Library/Application Support/Google/Chrome")
 DEFAULT_CHROME_PROFILE_DIRECTORY = "Default"
+CHECKPOINT_SUFFIX = ".checkpoint.json"
 
 
 class ProxyUnavailableError(RuntimeError):
@@ -253,6 +254,10 @@ class LiveDbWriter:
             cur.execute(
                 "CREATE INDEX IF NOT EXISTS idx_parser_records_run_id ON parser_records (run_id)"
             )
+            cur.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_parser_records_run_external_unique "
+                "ON parser_records (run_id, external_id)"
+            )
 
     def _start_run(self) -> None:
         with self._conn.cursor() as cur:
@@ -271,8 +276,9 @@ class LiveDbWriter:
                 """
                 INSERT INTO parser_records (run_id, source, external_id, payload)
                 VALUES (%s::uuid, %s, %s, %s)
+                ON CONFLICT (run_id, external_id) DO NOTHING
                 """,
-                (self.run_id, self.source, str(row.get("ad_id", "")).strip(), Json(row)),
+                (self.run_id, self.source, str(row.get("ad_id", "") or row.get("ad_url", "")).strip(), Json(row)),
             )
         self._processed += 1
 
@@ -295,6 +301,36 @@ class LiveDbWriter:
 
     def close(self) -> None:
         self._conn.close()
+
+
+def checkpoint_path_for_output(output_path: Path, explicit_path: str = "") -> Path:
+    if explicit_path.strip():
+        return Path(explicit_path).expanduser().resolve()
+    return output_path.with_suffix(output_path.suffix + CHECKPOINT_SUFFIX)
+
+
+def load_checkpoint(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def save_checkpoint(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp_path.replace(path)
+
+
+def remove_checkpoint(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 @dataclass
@@ -2198,6 +2234,9 @@ def fetch_phones_for_ads_selenium(
     chrome_binary: str,
     chrome_user_data_dir: str,
     chrome_profile_directory: str,
+    checkpoint_path: Path | None = None,
+    resume_state: dict[str, Any] | None = None,
+    listing_url: str = "",
     on_row: Callable[[dict[str, str]], None] | None = None,
 ) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
@@ -2206,6 +2245,32 @@ def fetch_phones_for_ads_selenium(
     current_cookie_file = ""
     proxy = ""
     ad_index = 0
+
+    if resume_state:
+        saved_listing = str(resume_state.get("listing_url", "")).strip()
+        saved_ads = resume_state.get("ads", [])
+        if saved_listing == listing_url and isinstance(saved_ads, list) and saved_ads == ads:
+            saved_rows = resume_state.get("rows", [])
+            if isinstance(saved_rows, list):
+                rows = [row for row in saved_rows if isinstance(row, dict)]
+            ad_index = max(0, min(int(resume_state.get("ad_index", 0)), total))
+            print(f"  -> resume checkpoint loaded: rows={len(rows)}, next={ad_index + 1}")
+
+    def persist_checkpoint() -> None:
+        if checkpoint_path is None:
+            return
+        save_checkpoint(
+            checkpoint_path,
+            {
+                "version": 1,
+                "source": "krisha",
+                "listing_url": listing_url,
+                "ads": ads,
+                "ad_index": ad_index,
+                "rows": rows,
+                "updated_at": time.time(),
+            },
+        )
 
     def start_driver_for_proxy(next_proxy: str) -> tuple[Any, str]:
         next_cookie_file = proxy_cookie_path(cookie_base_file, next_proxy)
@@ -2262,7 +2327,9 @@ def fetch_phones_for_ads_selenium(
                         )
                         if on_row:
                             on_row(rows[-1])
+                        persist_checkpoint()
                     ad_index = total
+                    persist_checkpoint()
                     break
                 continue
 
@@ -2302,6 +2369,7 @@ def fetch_phones_for_ads_selenium(
 
                 if row["status"] == "skipped":
                     ad_index += 1
+                    persist_checkpoint()
                     if ad_index < total:
                         sleep_between_requests(
                             delay_sec=delay_sec,
@@ -2319,6 +2387,7 @@ def fetch_phones_for_ads_selenium(
                 if row["error"]:
                     print(f"  -> error={row['error']}")
                 ad_index += 1
+                persist_checkpoint()
                 if ad_index < total:
                     sleep_between_requests(
                         delay_sec=delay_sec,
@@ -2342,6 +2411,9 @@ def fetch_phones_for_ads_selenium(
                 )
                 if on_row:
                     on_row(rows[-1])
+                persist_checkpoint()
+            ad_index = total
+            persist_checkpoint()
         return rows
     finally:
         if driver is not None:
@@ -2551,6 +2623,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to proxy list file (host:port per line)",
     )
     parser.add_argument("--output", default="results.csv", help="Output CSV file")
+    parser.add_argument("--checkpoint-file", default="", help="Path to resume checkpoint JSON file")
     parser.add_argument("--database-url", default="", help="PostgreSQL DSN for live per-record insert")
     parser.add_argument("--json-output", default="", help="Optional JSON output path")
     parser.add_argument("--cookie", default="", help="Cookie header string")
@@ -2700,6 +2773,7 @@ def main() -> int:
 
     proxies_file = Path(args.proxies_file)
     output_path = Path(args.output)
+    checkpoint_path = checkpoint_path_for_output(output_path, args.checkpoint_file)
 
     proxies = [DIRECT_PROXY] if args.no_proxy else load_lines(proxies_file)
     blocked_proxies = set() if args.no_proxy else set(load_optional_lines(Path(args.proxy_blacklist_file)))
@@ -2749,6 +2823,8 @@ def main() -> int:
     if args.shuffle and len(ads) > 1:
         random.shuffle(ads)
 
+    resume_state = load_checkpoint(checkpoint_path)
+
     if args.driver == "selenium":
         rows = fetch_phones_for_ads_selenium(
             ads,
@@ -2776,12 +2852,41 @@ def main() -> int:
             chrome_binary=chrome_binary,
             chrome_user_data_dir=chrome_user_data_dir,
             chrome_profile_directory=chrome_profile_directory,
+            checkpoint_path=checkpoint_path,
+            resume_state=resume_state,
+            listing_url=args.listing_url,
             on_row=live_db_writer.insert_row if live_db_writer else None,
         )
     else:
-        rows: list[dict[str, str]] = []
+        rows = []
         total = len(ads)
-        for idx, ad_url in enumerate(ads, start=1):
+        ad_index = 0
+        if resume_state:
+            saved_listing = str(resume_state.get("listing_url", "")).strip()
+            saved_ads = resume_state.get("ads", [])
+            if saved_listing == args.listing_url and isinstance(saved_ads, list) and saved_ads == ads:
+                saved_rows = resume_state.get("rows", [])
+                if isinstance(saved_rows, list):
+                    rows = [row for row in saved_rows if isinstance(row, dict)]
+                ad_index = max(0, min(int(resume_state.get("ad_index", 0)), total))
+                if rows:
+                    print(f"  -> resume checkpoint loaded: rows={len(rows)}, next={ad_index + 1}")
+
+        def persist_checkpoint() -> None:
+            save_checkpoint(
+                checkpoint_path,
+                {
+                    "version": 1,
+                    "source": "krisha",
+                    "listing_url": args.listing_url,
+                    "ads": ads,
+                    "ad_index": ad_index,
+                    "rows": rows,
+                    "updated_at": time.time(),
+                },
+            )
+
+        for idx, ad_url in enumerate(ads[ad_index:], start=ad_index + 1):
             print(f"[{idx}/{total}] {ad_url}")
             row = fetch_phone_for_ad(
                 ad_url,
@@ -2800,6 +2905,13 @@ def main() -> int:
             print(f"  -> status={status}, proxy={proxy}, phones={phones}")
             if row["error"]:
                 print(f"  -> error={row['error']}")
+            ad_index = idx
+            persist_checkpoint()
+        if live_db_writer and rows:
+            live_db_writer._processed = len(rows)
+
+    if live_db_writer and rows:
+        live_db_writer._processed = len(rows)
 
     save_csv(rows, output_path)
     print(f"Saved CSV: {output_path.resolve()}")
@@ -2820,6 +2932,8 @@ def main() -> int:
         )
         print(f"[db] live save completed run_id={live_db_writer.run_id}, records={len(rows)}")
         live_db_writer.close()
+
+    remove_checkpoint(checkpoint_path)
 
     return 0
 

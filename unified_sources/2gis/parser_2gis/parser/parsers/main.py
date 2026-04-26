@@ -4,12 +4,39 @@ import base64
 import json
 import re
 import urllib.parse
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 from ...chrome import ChromeRemote
 from ...common import wait_until_finished
 from ...logger import logger
 from ..utils import blocked_requests
+
+CHECKPOINT_VERSION = 1
+
+
+def _load_checkpoint(path: Path) -> dict[str, object]:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _save_checkpoint(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp_path.replace(path)
+
+
+def _remove_checkpoint(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except Exception:  # noqa: BLE001
+        pass
 
 if TYPE_CHECKING:
     from ...chrome import ChromeOptions
@@ -252,12 +279,71 @@ class MainParser:
 
         self._prewarm_search_page()
 
+        checkpoint_path = Path(self._options.checkpoint_file) if self._options.checkpoint_file else Path(writer._file_path).with_suffix(Path(writer._file_path).suffix + ".checkpoint.json")
+        resume_state = _load_checkpoint(checkpoint_path)
+
         # Parsed records
         collected_records = 0
         seen_item_ids: set[str] = set()
 
         # Already visited links
         visited_links: set[str] = set()
+
+        if (
+            resume_state.get("version") == CHECKPOINT_VERSION
+            and resume_state.get("url") == self._url
+        ):
+            try:
+                collected_records = max(0, int(resume_state.get("collected_records", 0)))
+            except Exception:
+                collected_records = 0
+            try:
+                seen_item_ids = {str(item) for item in resume_state.get("seen_item_ids", []) if item}
+            except Exception:
+                seen_item_ids = set()
+            try:
+                visited_links = {str(item) for item in resume_state.get("visited_links", []) if item}
+            except Exception:
+                visited_links = set()
+            try:
+                saved_walk_page = resume_state.get("walk_page_number")
+                if saved_walk_page is not None:
+                    walk_page_number = int(saved_walk_page)
+            except Exception:
+                pass
+            try:
+                resume_page_number = int(resume_state.get("current_page_number", 1))
+            except Exception:
+                resume_page_number = 1
+            if resume_page_number > 1:
+                resumed_page = self._go_page(resume_page_number)
+                if resumed_page:
+                    current_page_number = resumed_page
+                    self._prewarm_search_page()
+            logger.info(
+                "Checkpoint loaded: page=%s, records=%s, visited=%s",
+                current_page_number,
+                collected_records,
+                len(visited_links),
+            )
+            try:
+                setattr(writer, "_wrote_count", collected_records)
+            except Exception:
+                pass
+
+        def persist_checkpoint() -> None:
+            _save_checkpoint(
+                checkpoint_path,
+                {
+                    "version": CHECKPOINT_VERSION,
+                    "url": self._url,
+                    "current_page_number": current_page_number,
+                    "walk_page_number": walk_page_number,
+                    "collected_records": collected_records,
+                    "seen_item_ids": sorted(seen_item_ids),
+                    "visited_links": sorted(visited_links),
+                },
+            )
 
         # This wrapper is not necessary, but I'd like to be sure
         # we haven't gathered links from old DOM somehow.
@@ -270,12 +356,10 @@ class MainParser:
                 href = link.attributes['href']
                 if href in link_addresses:
                     continue
+                if href in visited_links:
+                    continue
                 unique_links.append(link)
                 link_addresses.add(href)
-            if link_addresses & visited_links:
-                return []
-
-            visited_links.update(link_addresses)
             return unique_links
 
         consecutive_skips = 0
@@ -348,6 +432,8 @@ class MainParser:
                         item_id = self._extract_item_id(doc)
                         if item_id and item_id in seen_item_ids:
                             logger.debug('Дубликат организации (%s), пропуск.', item_id)
+                            visited_links.add(link_href)
+                            persist_checkpoint()
                             continue
                         if item_id:
                             seen_item_ids.add(item_id)
@@ -356,6 +442,8 @@ class MainParser:
                         writer.write(doc)
                         collected_records += 1
                         consecutive_skips = 0
+                        visited_links.add(link_href)
+                        persist_checkpoint()
                     else:
                         consecutive_skips += 1
                         if resp and resp.get('status', 0) < 0:
@@ -371,10 +459,13 @@ class MainParser:
                         if consecutive_skips >= 3:
                             logger.warning('Серия пропусков (%s), пауза 2с для стабилизации.', consecutive_skips)
                             self._chrome_remote.wait(2)
+                        visited_links.add(link_href)
+                        persist_checkpoint()
 
                     # We've reached our limit, bail
                     if collected_records >= self._options.max_records:
                         logger.info('Спарсено максимально разрешенное количество записей с данного URL.')
+                        _remove_checkpoint(checkpoint_path)
                         return
 
             # Evaluate Garbage Collection if it's been exposed and enabled
@@ -398,10 +489,13 @@ class MainParser:
             current_page_number = self._go_page(next_page_number)  # type: ignore
             if not current_page_number:
                 break  # Reached the end of the search results
+            persist_checkpoint()
 
             # Unset walking page if we've done walking to the desired page
             if walk_page_number and walk_page_number <= current_page_number:
                 walk_page_number = None
+
+        _remove_checkpoint(checkpoint_path)
 
     def close(self) -> None:
         self._chrome_remote.stop()

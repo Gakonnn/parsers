@@ -129,6 +129,10 @@ class FileWriter(ABC):
                 """
             )
             cur.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_parser_records_run_external_unique "
+                "ON parser_records (run_id, external_id)"
+            )
+            cur.execute(
                 "INSERT INTO parser_runs (run_id, source, status, metrics) "
                 "VALUES (%s::uuid, %s, %s, %s::jsonb) "
                 "ON CONFLICT (run_id) DO NOTHING",
@@ -144,6 +148,7 @@ class FileWriter(ABC):
                 """
                 INSERT INTO parser_records (run_id, source, external_id, payload)
                 VALUES (%s::uuid, %s, %s, %s)
+                ON CONFLICT (run_id, external_id) DO NOTHING
                 """,
                 (self._live_db_run_id, "2gis", external_id, Json(payload)),
             )

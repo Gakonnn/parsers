@@ -1019,6 +1019,7 @@ def build_krisha_command(payload: dict[str, Any]) -> tuple[list[str], Path, Path
     output_name = normalize_output_name(payload.get("output_name", ""), "krisha", "json")
     output_path = output_dir / output_name
     data_output_path = output_dir / f"{output_path.stem}_data_{timestamp_slug()}.csv"
+    checkpoint_path = data_output_path.with_suffix(data_output_path.suffix + ".checkpoint.json")
     database_url = payload.get("database_url", "").strip()
     command = [
         resolve_python_bin(OLX_DIR),
@@ -1041,6 +1042,8 @@ def build_krisha_command(payload: dict[str, Any]) -> tuple[list[str], Path, Path
         "3.5",
         "--output",
         str(data_output_path),
+        "--checkpoint-file",
+        str(checkpoint_path),
         "--output-target",
         "db",
         "--report-json",

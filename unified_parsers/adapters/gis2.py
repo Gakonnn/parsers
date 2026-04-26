@@ -50,6 +50,7 @@ class Gis2Adapter(SourceAdapter):
     def build_command(self, args: Namespace, project_root: Path) -> list[str]:
         output_path = self.output_path(args, project_root)
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        checkpoint_path = output_path.with_suffix(output_path.suffix + ".checkpoint.json")
 
         command = [
             "parser-2gis",
@@ -57,6 +58,8 @@ class Gis2Adapter(SourceAdapter):
             str(args.search_url),
             "-o",
             str(output_path),
+            "--parser.checkpoint-file",
+            str(checkpoint_path),
             "-f",
             str(args.format),
             "--chrome.start-maximized",

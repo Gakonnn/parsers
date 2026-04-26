@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import pathlib
+
+from typing import Optional
+
 from pydantic import BaseModel, NonNegativeInt, PositiveInt
 
 from ..chrome.options import default_memory_limit
@@ -27,3 +31,4 @@ class ParserOptions(BaseModel):
     max_records: PositiveInt = default_max_records()
     use_gc: bool = False
     gc_pages_interval: PositiveInt = 10
+    checkpoint_file: Optional[pathlib.Path] = None
