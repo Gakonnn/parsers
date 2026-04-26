@@ -44,6 +44,8 @@ def _build_run_command(
         str(payload.get("search_url", "https://2gis.ru/almaty/search/аптека")),
         "--max-records",
         str(int(payload.get("max_records", 100))),
+        "--delay-between-clicks",
+        str(max(0, int(payload.get("delay_between_clicks", 250)))),
         "--format",
         str(payload.get("format", "xlsx")),
         "--output",
@@ -52,7 +54,7 @@ def _build_run_command(
         "file",
         "--keep-output",
     ]
-    if bool(payload.get("start_maximized", True)):
+    if bool(payload.get("start_maximized", False)):
         command.append("--start-maximized")
     else:
         command.append("--no-start-maximized")

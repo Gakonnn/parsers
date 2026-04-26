@@ -20,6 +20,12 @@ class Gis2Adapter(SourceAdapter):
             help="Search URL for 2GIS parser",
         )
         parser.add_argument("--max-records", type=int, default=100, help="Maximum records")
+        parser.add_argument(
+            "--delay-between-clicks",
+            type=int,
+            default=250,
+            help="Delay between clicks in milliseconds (stabilizes parsing on server IPs)",
+        )
         parser.add_argument("--format", choices=["xlsx", "csv", "json"], default="xlsx", help="Output format")
         parser.add_argument(
             "--start-maximized",
@@ -34,7 +40,7 @@ class Gis2Adapter(SourceAdapter):
             help="Do not maximize browser window on start",
         )
         parser.add_argument("--output", default="unified_2gis_results.xlsx", help="Output file path")
-        parser.set_defaults(start_maximized=True)
+        parser.set_defaults(start_maximized=False)
 
     def output_path(self, args: Namespace, project_root: Path) -> Path:
         output_path = Path(args.output)
@@ -69,6 +75,12 @@ class Gis2Adapter(SourceAdapter):
             "yes" if args.start_maximized else "no",
             "--parser.max-records",
             str(max(1, int(args.max_records))),
+            "--parser.delay_between_clicks",
+            str(max(0, int(args.delay_between_clicks))),
+            "--chrome.disable-images",
+            "yes",
+            "--chrome.silent-browser",
+            "yes",
         ]
 
         chrome_binary = (
