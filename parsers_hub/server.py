@@ -11,6 +11,7 @@ import subprocess
 import threading
 import time
 import uuid
+import unicodedata
 import html
 import csv
 from base64 import b64decode
@@ -1927,15 +1928,32 @@ class AppHandler(BaseHTTPRequestHandler):
             content_type = "text/csv; charset=utf-8"
         elif suffix == ".xlsx":
             content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        body = file_path.read_bytes()
+        file_size = file_path.stat().st_size
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Length", str(file_size))
         if download_name:
-            safe_name = download_name.replace('"', "")
-            self.send_header("Content-Disposition", f'attachment; filename="{safe_name}"')
+            ascii_name = _ascii_filename(download_name)
+            encoded_name = quote(download_name)
+            self.send_header(
+                "Content-Disposition",
+                f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{encoded_name}",
+            )
         self.end_headers()
-        self.wfile.write(body)
+        with file_path.open("rb") as file_obj:
+            shutil.copyfileobj(file_obj, self.wfile)
+
+
+def _ascii_filename(name: str) -> str:
+    cleaned = name.replace('"', "").replace("\n", " ").replace("\r", " ").strip()
+    if not cleaned:
+        return "export"
+    normalized = unicodedata.normalize("NFKD", cleaned)
+    ascii_only = normalized.encode("ascii", "ignore").decode("ascii").strip()
+    ascii_only = re.sub(r"[^A-Za-z0-9._ -]", "_", ascii_only)
+    ascii_only = re.sub(r"\s+", "_", ascii_only)
+    ascii_only = ascii_only.strip("._")
+    return ascii_only or "export"
 
 
 def main() -> None:
