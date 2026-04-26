@@ -34,30 +34,18 @@ RUN python -m pip install --upgrade pip && \
       xlsxwriter \
       parser-2gis && \
     python - <<'PY'
+import shutil
 from pathlib import Path
 
 import parser_2gis
 
 package_root = Path(parser_2gis.__file__).resolve().parent
+local_package_root = Path("/app/unified_sources/2gis/parser_2gis")
+if not local_package_root.exists():
+    raise SystemExit(f"Local parser_2gis package not found: {local_package_root}")
 
-main_py = package_root / "parser" / "parsers" / "main.py"
-main_text = main_py.read_text(encoding="utf-8")
-main_patched = main_text.replace(
-    "self._item_response_pattern = r'https://catalog\\.api\\.2gis.[^/]+/.*/items/byid'",
-    "self._item_response_pattern = r'https://catalog\\.api\\.2gis\\.[^/]+/.*/items(?:/byid)?(?:\\?.*)?$'",
-)
-if main_patched == main_text:
-    raise SystemExit(f"Patch pattern not found in {main_py}")
-main_py.write_text(main_patched, encoding="utf-8")
-print(f'Patched parser-2gis API matcher in {main_py}')
-
-# Replace parser loop with our hardened variant used in stable 8092 flow
-# (handles stale DOM nodes and retries clicks/responses safely).
-custom_main_py = Path("/app/unified_sources/2gis/parser_2gis/parser/parsers/main.py")
-if not custom_main_py.exists():
-    raise SystemExit(f"Custom parser main.py not found: {custom_main_py}")
-main_py.write_text(custom_main_py.read_text(encoding="utf-8"), encoding="utf-8")
-print(f'Replaced parser-2gis parser main with custom version from {custom_main_py}')
+shutil.copytree(local_package_root, package_root, dirs_exist_ok=True)
+print(f'Replaced parser-2gis package with local stable package from {local_package_root}')
 
 catalog_item_py = package_root / "writer" / "models" / "catalog_item.py"
 catalog_text = catalog_item_py.read_text(encoding="utf-8")
