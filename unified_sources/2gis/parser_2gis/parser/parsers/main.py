@@ -174,6 +174,21 @@ class MainParser:
         except Exception:
             return False
 
+    @staticmethod
+    def _extract_item_id(doc: dict) -> str | None:
+        """Extract stable organization id from a catalog document."""
+        try:
+            items = doc['result']['items']
+            if not items:
+                return None
+            item = items[0]
+            if not isinstance(item, dict):
+                return None
+            item_id = item.get('id')
+            return str(item_id) if item_id is not None else None
+        except Exception:
+            return None
+
     def parse(self, writer: FileWriter) -> None:
         """Parse URL with result items.
 
@@ -213,6 +228,7 @@ class MainParser:
 
         # Parsed records
         collected_records = 0
+        seen_item_ids: set[str] = set()
 
         # Already visited links
         visited_links: set[str] = set()
@@ -292,6 +308,13 @@ class MainParser:
                             logger.debug('Пропуск нерелевантного ответа каталога.')
 
                     if doc:
+                        item_id = self._extract_item_id(doc)
+                        if item_id and item_id in seen_item_ids:
+                            logger.debug('Дубликат организации (%s), пропуск.', item_id)
+                            continue
+                        if item_id:
+                            seen_item_ids.add(item_id)
+
                         # Write API document into a file
                         writer.write(doc)
                         collected_records += 1

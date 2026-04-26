@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import html
 import json
+import mimetypes
+import os
 import queue
 import threading
 import urllib.parse
@@ -50,6 +52,8 @@ def _render_page(state: _WebState) -> str:
         urls_value = '\n'.join(state.urls)
         output_path = state.output_path
         output_format = state.format
+        file_exists = bool(output_path) and os.path.isfile(output_path)
+        file_size = os.path.getsize(output_path) if file_exists else 0
 
     format_options = ''.join(
         f'<option value="{fmt}"{" selected" if fmt == output_format else ""}>{fmt}</option>'
@@ -165,6 +169,14 @@ def _render_page(state: _WebState) -> str:
         <button class="danger" type="submit" {'disabled' if not running else ''}>Стоп</button>
       </form>
 
+      <form method="get" action="/download" class="btns">
+        <button type="submit" {'disabled' if not file_exists else ''}>Скачать результат</button>
+      </form>
+      <div class="status">
+        Файл: <b>{html.escape(output_path) if output_path else 'не выбран'}</b>
+        ({file_size} байт)
+      </div>
+
       <div id="log"></div>
     </div>
   </div>
@@ -219,6 +231,25 @@ def web_app(urls: list[str] | None, output_path: str | None,
             self.end_headers()
             self.wfile.write(encoded)
 
+        def _send_file(self, path: str) -> None:
+            if not os.path.isfile(path):
+                self.send_error(404, 'Result file not found')
+                return
+
+            file_name = os.path.basename(path)
+            content_type = mimetypes.guess_type(file_name)[0] or 'application/octet-stream'
+            file_size = os.path.getsize(path)
+
+            with open(path, 'rb') as f:
+                data = f.read()
+
+            self.send_response(200)
+            self.send_header('Content-Type', content_type)
+            self.send_header('Content-Disposition', f'attachment; filename="{file_name}"')
+            self.send_header('Content-Length', str(file_size))
+            self.end_headers()
+            self.wfile.write(data)
+
         def _redirect_home(self) -> None:
             self.send_response(303)
             self.send_header('Location', '/')
@@ -240,6 +271,15 @@ def web_app(urls: list[str] | None, output_path: str | None,
                     }
                     state.logs = []
                 self._send_json(payload)
+                return
+
+            if self.path == '/download':
+                with state.lock:
+                    output_path = state.output_path
+                if not output_path:
+                    self.send_error(404, 'Output path is empty')
+                    return
+                self._send_file(output_path)
                 return
 
             self.send_error(404)
