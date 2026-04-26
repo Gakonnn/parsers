@@ -49,22 +49,18 @@ class Gis2Adapter(SourceAdapter):
         return output_path
 
     def build_command(self, args: Namespace, project_root: Path) -> list[str]:
-        gis_dir = (project_root / "unified_sources" / "2gis").resolve()
-        python_bin = gis_dir / ".venv/bin/python"
+        python_bin = (project_root / "venv/bin/python").resolve()
         if not python_bin.exists():
-            fallback = project_root / "venv/bin/python"
-            if fallback.exists():
-                python_bin = fallback
-            else:
-                env_python = os.environ.get("PARSERS_PYTHON_BIN", "").strip()
-                python_bin = Path(env_python) if env_python else Path(sys.executable)
+            env_python = os.environ.get("PARSERS_PYTHON_BIN", "").strip()
+            python_bin = Path(env_python) if env_python else Path(sys.executable)
 
         output_path = self.output_path(args, project_root)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         command = [
             str(python_bin),
-            "parser-2gis.py",
+            "-m",
+            "parser_2gis.main",
             "-i",
             str(args.search_url),
             "-o",
@@ -83,10 +79,7 @@ class Gis2Adapter(SourceAdapter):
             "yes",
         ]
 
-        chrome_binary = (
-            os.environ.get("CHROME_BINARY", "").strip()
-            or os.environ.get("CHROMIUM_BINARY", "").strip()
-        )
+        chrome_binary = os.environ.get("PARSERS_2GIS_BINARY", "").strip()
         if chrome_binary:
             command.extend(["--chrome.binary_path", chrome_binary])
 
@@ -99,4 +92,4 @@ class Gis2Adapter(SourceAdapter):
         return command
 
     def execution_cwd(self, project_root: Path) -> Path:
-        return (project_root / "unified_sources" / "2gis").resolve()
+        return project_root.resolve()
