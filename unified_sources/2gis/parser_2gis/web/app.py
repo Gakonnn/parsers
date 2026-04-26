@@ -6,6 +6,7 @@ import mimetypes
 import os
 import queue
 import threading
+import time
 import urllib.parse
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -26,10 +27,17 @@ class _WebState:
         self.output_path = output_path or ''
         self.format = format if format in ('csv', 'xlsx', 'json') else 'csv'
         self.runner: GUIRunner | None = None
+        self.controller: threading.Thread | None = None
         self.stop_requested = False
         self.log_queue: queue.Queue[tuple[str, str]] = queue.Queue()
         self.logs: list[str] = []
         self.config = config
+        self.auto_restart = True
+        self.auto_max_attempts = 12
+        self.auto_probe_seconds = 12
+        self.auto_first_parse_deadline = 5.0
+        self.auto_min_rps = 1.0
+        self.auto_current_attempt = 0
 
     def drain_logs(self) -> None:
         while True:
@@ -40,6 +48,25 @@ class _WebState:
             self.logs.append(message)
 
 
+def _is_runner_alive(state: _WebState) -> bool:
+    return state.runner is not None and state.runner.is_alive()
+
+
+def _is_controller_alive(state: _WebState) -> bool:
+    return state.controller is not None and state.controller.is_alive()
+
+
+def _csv_data_rows(path: str) -> int:
+    if not path or not os.path.isfile(path):
+        return 0
+    try:
+        with open(path, 'r', encoding='utf-8', errors='ignore') as fp:
+            rows = sum(1 for _ in fp)
+        return max(0, rows - 1)
+    except Exception:
+        return 0
+
+
 def _parse_urls(raw_urls: str) -> list[str]:
     urls = [line.strip() for line in raw_urls.splitlines()]
     return [url for url in urls if url]
@@ -48,12 +75,18 @@ def _parse_urls(raw_urls: str) -> list[str]:
 def _render_page(state: _WebState) -> str:
     with state.lock:
         state.drain_logs()
-        running = state.runner is not None and state.runner.is_alive()
+        running = _is_runner_alive(state) or _is_controller_alive(state)
         urls_value = '\n'.join(state.urls)
         output_path = state.output_path
         output_format = state.format
         file_exists = bool(output_path) and os.path.isfile(output_path)
         file_size = os.path.getsize(output_path) if file_exists else 0
+        auto_restart = state.auto_restart
+        auto_max_attempts = state.auto_max_attempts
+        auto_probe_seconds = state.auto_probe_seconds
+        auto_first_parse_deadline = state.auto_first_parse_deadline
+        auto_min_rps = state.auto_min_rps
+        auto_current_attempt = state.auto_current_attempt
 
     format_options = ''.join(
         f'<option value="{fmt}"{" selected" if fmt == output_format else ""}>{fmt}</option>'
@@ -160,6 +193,42 @@ def _render_page(state: _WebState) -> str:
           </div>
         </div>
 
+        <div class="row">
+          <div>
+            <label for="auto_restart">Авто-перезапуск до стабильного старта (рекомендуется CSV)</label>
+            <select id="auto_restart" name="auto_restart">
+              <option value="yes"{" selected" if auto_restart else ""}>Вкл</option>
+              <option value="no"{" selected" if not auto_restart else ""}>Выкл</option>
+            </select>
+          </div>
+          <div>
+            <label for="auto_max_attempts">Макс. попыток</label>
+            <input id="auto_max_attempts" type="number" name="auto_max_attempts" value="{auto_max_attempts}" min="1" max="50">
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label for="auto_probe_seconds">Окно проверки (сек)</label>
+            <input id="auto_probe_seconds" type="number" name="auto_probe_seconds" value="{auto_probe_seconds}" min="4" max="60">
+          </div>
+          <div>
+            <label for="auto_first_parse_deadline">Первый результат до (сек)</label>
+            <input id="auto_first_parse_deadline" type="number" step="0.5" name="auto_first_parse_deadline" value="{auto_first_parse_deadline}" min="1" max="20">
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label for="auto_min_rps">Мин. скорость (записей/сек)</label>
+            <input id="auto_min_rps" type="number" step="0.1" name="auto_min_rps" value="{auto_min_rps}" min="0.1" max="10">
+          </div>
+          <div>
+            <label>Текущая авто-попытка</label>
+            <input type="text" value="{auto_current_attempt if auto_current_attempt else '-'}" readonly>
+          </div>
+        </div>
+
         <div class="btns">
           <button type="submit" {'disabled' if running else ''}>Запуск</button>
         </div>
@@ -214,6 +283,95 @@ def web_app(urls: list[str] | None, output_path: str | None,
     state = _WebState(urls, output_path, format, config)
     setup_gui_logger(state.log_queue, config.log)
 
+    def _log(message: str) -> None:
+        with state.lock:
+            state.logs.append(message if message.endswith('\n') else message + '\n')
+
+    def _start_runner() -> GUIRunner:
+        with state.lock:
+            runner = GUIRunner(state.urls, state.output_path, state.format, state.config)
+            state.runner = runner
+        runner.start()
+        return runner
+
+    def _stop_runner(runner: GUIRunner | None) -> None:
+        if runner is None:
+            return
+        if runner.is_alive():
+            try:
+                runner.stop()
+            except Exception:
+                pass
+            runner.join(timeout=30)
+
+    def _auto_start_loop() -> None:
+        with state.lock:
+            max_attempts = max(1, int(state.auto_max_attempts))
+            probe_seconds = max(4, int(state.auto_probe_seconds))
+            first_deadline = max(1.0, float(state.auto_first_parse_deadline))
+            min_rps = max(0.1, float(state.auto_min_rps))
+            output_path_local = state.output_path
+
+        for attempt in range(1, max_attempts + 1):
+            with state.lock:
+                if state.stop_requested:
+                    break
+                state.auto_current_attempt = attempt
+            _log(f"[auto] Попытка запуска {attempt}/{max_attempts}")
+
+            runner = _start_runner()
+            start_ts = time.time()
+            base_rows = _csv_data_rows(output_path_local)
+            first_record_delay: float | None = None
+            records_seen = 0
+
+            while time.time() - start_ts < probe_seconds:
+                with state.lock:
+                    if state.stop_requested:
+                        _stop_runner(runner)
+                        state.runner = None
+                        break
+                current_rows = max(0, _csv_data_rows(output_path_local) - base_rows)
+                records_seen = max(records_seen, current_rows)
+                if records_seen > 0 and first_record_delay is None:
+                    first_record_delay = time.time() - start_ts
+                if not runner.is_alive():
+                    break
+                time.sleep(1)
+
+            elapsed = max(0.001, time.time() - start_ts)
+            rps = records_seen / elapsed
+            stable = (
+                first_record_delay is not None
+                and first_record_delay <= first_deadline
+                and rps >= min_rps
+            )
+            _log(
+                f"[auto] Итог попытки {attempt}: records={records_seen}, "
+                f"first={round(first_record_delay,2) if first_record_delay is not None else 'none'}s, "
+                f"rps={round(rps,2)}"
+            )
+
+            if stable:
+                _log(f"[auto] Стабильный старт найден на попытке {attempt}.")
+                with state.lock:
+                    state.auto_current_attempt = attempt
+                    state.controller = None
+                return
+
+            _log(f"[auto] Нестабильный старт, перезапуск.")
+            _stop_runner(runner)
+            with state.lock:
+                if state.runner is runner:
+                    state.runner = None
+            if attempt < max_attempts:
+                time.sleep(1)
+
+        with state.lock:
+            state.controller = None
+            state.auto_current_attempt = 0
+        _log("[auto] Лимит попыток исчерпан.")
+
     class Handler(BaseHTTPRequestHandler):
         def _send_html(self, body: str) -> None:
             encoded = body.encode('utf-8')
@@ -265,10 +423,11 @@ def web_app(urls: list[str] | None, output_path: str | None,
             if path == '/status':
                 with state.lock:
                     state.drain_logs()
-                    running = state.runner is not None and state.runner.is_alive()
+                    running = _is_runner_alive(state) or _is_controller_alive(state)
                     payload = {
                         'running': running,
                         'stop_requested': state.stop_requested,
+                        'auto_current_attempt': state.auto_current_attempt,
                         'logs': state.logs,
                     }
                     state.logs = []
@@ -298,25 +457,51 @@ def web_app(urls: list[str] | None, output_path: str | None,
                 format_form = form_data.get('format', ['csv'])[0]
                 if format_form not in ('csv', 'xlsx', 'json'):
                     format_form = 'csv'
+                auto_restart = form_data.get('auto_restart', ['yes'])[0] == 'yes'
+                auto_max_attempts = int(form_data.get('auto_max_attempts', ['12'])[0] or '12')
+                auto_probe_seconds = int(form_data.get('auto_probe_seconds', ['12'])[0] or '12')
+                auto_first_parse_deadline = float(form_data.get('auto_first_parse_deadline', ['5'])[0] or '5')
+                auto_min_rps = float(form_data.get('auto_min_rps', ['1.0'])[0] or '1.0')
 
+                should_start = False
                 with state.lock:
-                    if state.runner is None or not state.runner.is_alive():
+                    busy = _is_runner_alive(state) or _is_controller_alive(state)
+                    if not busy:
                         state.urls = urls_form
                         state.output_path = output_path_form
                         state.format = format_form
+                        state.auto_restart = auto_restart
+                        state.auto_max_attempts = max(1, min(auto_max_attempts, 50))
+                        state.auto_probe_seconds = max(4, min(auto_probe_seconds, 60))
+                        state.auto_first_parse_deadline = max(1.0, min(auto_first_parse_deadline, 20.0))
+                        state.auto_min_rps = max(0.1, min(auto_min_rps, 10.0))
                         state.stop_requested = False
                         state.logs = []
-                        state.runner = GUIRunner(state.urls, state.output_path, state.format, state.config)
-                        state.runner.start()
+                        state.auto_current_attempt = 0
+                        should_start = True
+
+                if should_start:
+                    if auto_restart and format_form == 'csv':
+                        controller = threading.Thread(target=_auto_start_loop, daemon=True)
+                        with state.lock:
+                            state.controller = controller
+                        controller.start()
+                    else:
+                        _start_runner()
 
                 self._redirect_home()
                 return
 
             if path == '/stop':
+                runner: GUIRunner | None = None
                 with state.lock:
-                    if state.runner is not None and state.runner.is_alive():
-                        state.stop_requested = True
-                        state.runner.stop()
+                    state.stop_requested = True
+                    runner = state.runner
+                    state.auto_current_attempt = 0
+                _stop_runner(runner)
+                with state.lock:
+                    state.runner = None
+                    state.controller = None
                 self._redirect_home()
                 return
 
@@ -342,8 +527,9 @@ def web_app(urls: list[str] | None, output_path: str | None,
     except KeyboardInterrupt:
         pass
     finally:
+        runner: GUIRunner | None = None
         with state.lock:
-            if state.runner is not None and state.runner.is_alive():
-                state.runner.stop()
-                state.runner.join()
+            state.stop_requested = True
+            runner = state.runner
+        _stop_runner(runner)
         server.server_close()
