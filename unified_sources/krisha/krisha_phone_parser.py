@@ -219,6 +219,7 @@ class LiveDbWriter:
         self._conn = psycopg2.connect(database_url)
         self._conn.autocommit = True
         self._processed = 0
+        self._seen_external_ids: set[str] = set()
         self._ensure_schema()
         self._start_run()
 
@@ -254,10 +255,6 @@ class LiveDbWriter:
             cur.execute(
                 "CREATE INDEX IF NOT EXISTS idx_parser_records_run_id ON parser_records (run_id)"
             )
-            cur.execute(
-                "CREATE UNIQUE INDEX IF NOT EXISTS idx_parser_records_run_external_unique "
-                "ON parser_records (run_id, external_id)"
-            )
 
     def _start_run(self) -> None:
         with self._conn.cursor() as cur:
@@ -271,15 +268,32 @@ class LiveDbWriter:
             )
 
     def insert_row(self, row: dict[str, str]) -> None:
+        external_id = str(row.get("ad_id", "") or row.get("ad_url", "")).strip()
+        if external_id and external_id in self._seen_external_ids:
+            return
         with self._conn.cursor() as cur:
+            if external_id:
+                cur.execute(
+                    """
+                    SELECT 1
+                    FROM parser_records
+                    WHERE run_id = %s::uuid AND external_id = %s
+                    LIMIT 1
+                    """,
+                    (self.run_id, external_id),
+                )
+                if cur.fetchone():
+                    self._seen_external_ids.add(external_id)
+                    return
             cur.execute(
                 """
                 INSERT INTO parser_records (run_id, source, external_id, payload)
                 VALUES (%s::uuid, %s, %s, %s)
-                ON CONFLICT (run_id, external_id) DO NOTHING
                 """,
-                (self.run_id, self.source, str(row.get("ad_id", "") or row.get("ad_url", "")).strip(), Json(row)),
+                (self.run_id, self.source, external_id, Json(row)),
             )
+        if external_id:
+            self._seen_external_ids.add(external_id)
         self._processed += 1
 
     def finish(self, *, status: str, skipped: int = 0, errors: int = 0, output_path: str = "") -> None:
