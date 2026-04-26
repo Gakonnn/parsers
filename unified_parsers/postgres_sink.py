@@ -150,19 +150,55 @@ def _read_json_rows(path: Path) -> list[dict[str, Any]]:
 def _read_xlsx_rows(path: Path) -> list[dict[str, Any]]:
     ns = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
     with zipfile.ZipFile(path) as zf:
-        xml_bytes = zf.read("xl/worksheets/sheet1.xml")
-    root = ET.fromstring(xml_bytes)
+        sheet_xml = zf.read("xl/worksheets/sheet1.xml")
+        shared_strings: list[str] = []
+        if "xl/sharedStrings.xml" in zf.namelist():
+            shared_root = ET.fromstring(zf.read("xl/sharedStrings.xml"))
+            for si in shared_root.findall(".//x:si", ns):
+                parts = [node.text or "" for node in si.findall(".//x:t", ns)]
+                shared_strings.append("".join(parts))
+
+    root = ET.fromstring(sheet_xml)
     rows: list[list[str]] = []
     for row_node in root.findall(".//x:sheetData/x:row", ns):
-        values: list[str] = []
+        cells_by_col: dict[int, str] = {}
+        max_col = 0
         for cell in row_node.findall("x:c", ns):
-            text_node = cell.find("x:is/x:t", ns)
-            values.append((text_node.text or "") if text_node is not None else "")
-        rows.append(values)
+            ref = cell.get("r", "")
+            col_letters = "".join(ch for ch in ref if ch.isalpha())
+            if col_letters:
+                col_idx = 0
+                for ch in col_letters:
+                    col_idx = col_idx * 26 + (ord(ch.upper()) - ord("A") + 1)
+                col_idx -= 1
+            else:
+                col_idx = max_col
+            cell_type = (cell.get("t") or "").strip()
+            value = ""
+            if cell_type == "inlineStr":
+                parts = [node.text or "" for node in cell.findall(".//x:is//x:t", ns)]
+                value = "".join(parts)
+            else:
+                v_node = cell.find("x:v", ns)
+                if v_node is not None and v_node.text is not None:
+                    raw = v_node.text
+                    if cell_type == "s":
+                        try:
+                            value = shared_strings[int(raw)]
+                        except (ValueError, IndexError):
+                            value = ""
+                    else:
+                        value = raw
+            cells_by_col[col_idx] = value
+            if col_idx > max_col:
+                max_col = col_idx
+        row_values = [cells_by_col.get(i, "") for i in range(max_col + 1)]
+        rows.append(row_values)
 
     if not rows:
         return []
-    headers = rows[0]
+    headers = [str(h or "").strip() for h in rows[0]]
+    headers = [h if h else f"column_{i+1}" for i, h in enumerate(headers)]
     records: list[dict[str, Any]] = []
     for row in rows[1:]:
         padded = row + [""] * max(0, len(headers) - len(row))
@@ -179,4 +215,3 @@ def _read_generic_rows(path: Path) -> list[dict[str, Any]]:
     if suffix == ".xlsx":
         return _read_xlsx_rows(path)
     raise PostgresSinkError(f"Unsupported output format for DB import: {path}")
-

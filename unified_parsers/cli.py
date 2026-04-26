@@ -102,7 +102,13 @@ def handle_run(args: argparse.Namespace) -> int:
     output_target = str(getattr(args, "output_target", "file")).strip().lower()
     database_url = str(getattr(args, "database_url", "")).strip() or os.environ.get("DATABASE_URL", "").strip()
     live_db_supported_sources = {"krisha"}
-    if os.environ.get("PARSERS_2GIS_LIVE_DB", "").strip().lower() in {"1", "true", "yes", "on"}:
+    two_gis_live_db_enabled = os.environ.get("PARSERS_2GIS_LIVE_DB", "true").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if two_gis_live_db_enabled:
         live_db_supported_sources.add("2gis")
     live_db_enabled = (
         adapter.key in live_db_supported_sources
