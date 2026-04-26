@@ -1042,8 +1042,6 @@ def build_krisha_command(payload: dict[str, Any]) -> tuple[list[str], Path, Path
         "3.5",
         "--output",
         str(data_output_path),
-        "--checkpoint-file",
-        str(checkpoint_path),
         "--output-target",
         "db",
         "--report-json",

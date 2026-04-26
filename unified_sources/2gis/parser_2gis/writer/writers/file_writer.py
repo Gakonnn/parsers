@@ -37,6 +37,7 @@ class FileWriter(ABC):
             and Json is not None
         )
         self._live_db_records = 0
+        self._live_db_seen_external_ids: set[str] = set()
         if self._live_db_enabled:
             self._init_live_db()
 
@@ -129,7 +130,7 @@ class FileWriter(ABC):
                 """
             )
             cur.execute(
-                "CREATE UNIQUE INDEX IF NOT EXISTS idx_parser_records_run_external_unique "
+                "CREATE INDEX IF NOT EXISTS idx_parser_records_run_external "
                 "ON parser_records (run_id, external_id)"
             )
             cur.execute(
@@ -143,15 +144,33 @@ class FileWriter(ABC):
     def _live_db_insert(self, payload: dict[str, Any], external_id: str = "") -> None:
         if not self._live_db_enabled or self._live_db_conn is None:
             return
+        normalized_external_id = external_id.strip()
+        if normalized_external_id and normalized_external_id in self._live_db_seen_external_ids:
+            return
         with self._live_db_conn.cursor() as cur:
+            if normalized_external_id:
+                cur.execute(
+                    """
+                    SELECT 1
+                    FROM parser_records
+                    WHERE run_id = %s::uuid
+                      AND external_id = %s
+                    LIMIT 1
+                    """,
+                    (self._live_db_run_id, normalized_external_id),
+                )
+                if cur.fetchone():
+                    self._live_db_seen_external_ids.add(normalized_external_id)
+                    return
             cur.execute(
                 """
                 INSERT INTO parser_records (run_id, source, external_id, payload)
                 VALUES (%s::uuid, %s, %s, %s)
-                ON CONFLICT (run_id, external_id) DO NOTHING
                 """,
-                (self._live_db_run_id, "2gis", external_id, Json(payload)),
+                (self._live_db_run_id, "2gis", normalized_external_id, Json(payload)),
             )
+        if normalized_external_id:
+            self._live_db_seen_external_ids.add(normalized_external_id)
         self._live_db_records += 1
 
     def _finalize_live_db(self, *, status: str, processed: int) -> None:
