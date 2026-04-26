@@ -242,7 +242,7 @@ class JobManager:
         )
         auto_max_attempts = max(1, int(env.get("PARSERS_HUB_2GIS_AUTO_MAX_ATTEMPTS", "10")))
         auto_probe_seconds = max(4, int(env.get("PARSERS_HUB_2GIS_AUTO_PROBE_SECONDS", "10")))
-        auto_first_deadline = max(1.0, float(env.get("PARSERS_HUB_2GIS_AUTO_FIRST_PARSE_DEADLINE", "5")))
+        auto_first_deadline = max(1.0, float(env.get("PARSERS_HUB_2GIS_AUTO_FIRST_PARSE_DEADLINE", "7")))
         auto_min_rps = max(0.1, float(env.get("PARSERS_HUB_2GIS_AUTO_MIN_RPS", "0.8")))
 
         process: subprocess.Popen[str] | None = None
@@ -277,6 +277,7 @@ class JobManager:
             self._append_log(job, f"[auto] Попытка запуска {attempt}/{auto_max_attempts}\n")
             assert process.stdout is not None
             parsed_count = 0
+            error_count = 0
             first_parse_delay: float | None = None
             probe_start = time.monotonic()
 
@@ -296,6 +297,8 @@ class JobManager:
                     parsed_count += 1
                     if first_parse_delay is None:
                         first_parse_delay = time.monotonic() - probe_start
+                if "Данные не получены" in line or "ERROR" in line:
+                    error_count += 1
 
             elapsed = max(0.001, time.monotonic() - probe_start)
             rps = parsed_count / elapsed
@@ -303,12 +306,13 @@ class JobManager:
                 first_parse_delay is not None
                 and first_parse_delay <= auto_first_deadline
                 and rps >= auto_min_rps
+                and error_count == 0
             )
             self._append_log(
                 job,
                 f"[auto] Итог попытки {attempt}: records={parsed_count}, "
                 f"first={round(first_parse_delay, 2) if first_parse_delay is not None else 'none'}s, "
-                f"rps={round(rps, 2)}\n",
+                f"rps={round(rps, 2)}, errors={error_count}\n",
             )
 
             if job.stop_requested:
