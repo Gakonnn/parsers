@@ -15,6 +15,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2 \
     libxss1 \
     libxrandr2 \
+    chromium \
+    chromium-driver \
     xdg-utils \
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg \
