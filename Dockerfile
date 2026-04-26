@@ -51,6 +51,14 @@ if main_patched == main_text:
 main_py.write_text(main_patched, encoding="utf-8")
 print(f'Patched parser-2gis API matcher in {main_py}')
 
+# Replace parser loop with our hardened variant used in stable 8092 flow
+# (handles stale DOM nodes and retries clicks/responses safely).
+custom_main_py = Path("/app/unified_sources/2gis/parser_2gis/parser/parsers/main.py")
+if not custom_main_py.exists():
+    raise SystemExit(f"Custom parser main.py not found: {custom_main_py}")
+main_py.write_text(custom_main_py.read_text(encoding="utf-8"), encoding="utf-8")
+print(f'Replaced parser-2gis parser main with custom version from {custom_main_py}')
+
 catalog_item_py = package_root / "writer" / "models" / "catalog_item.py"
 catalog_text = catalog_item_py.read_text(encoding="utf-8")
 catalog_patched = catalog_text.replace("locale: str", "locale: Optional[str] = None")
