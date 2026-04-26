@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import select
 import shutil
 import signal
 import subprocess
@@ -235,28 +236,99 @@ class JobManager:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
 
-        try:
-            process = subprocess.Popen(
-                job.command,
-                cwd=job.cwd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                env=env,
-                preexec_fn=os.setsid,
-            )
-        except Exception as exc:  # noqa: BLE001
+        auto_enabled = (
+            job.parser_key == "2gis"
+            and env.get("PARSERS_HUB_2GIS_AUTO_RESTART", "true").strip().lower() in {"1", "true", "yes", "on"}
+        )
+        auto_max_attempts = max(1, int(env.get("PARSERS_HUB_2GIS_AUTO_MAX_ATTEMPTS", "10")))
+        auto_probe_seconds = max(4, int(env.get("PARSERS_HUB_2GIS_AUTO_PROBE_SECONDS", "10")))
+        auto_first_deadline = max(1.0, float(env.get("PARSERS_HUB_2GIS_AUTO_FIRST_PARSE_DEADLINE", "5")))
+        auto_min_rps = max(0.1, float(env.get("PARSERS_HUB_2GIS_AUTO_MIN_RPS", "0.9")))
+
+        process: subprocess.Popen[str] | None = None
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                process = subprocess.Popen(
+                    job.command,
+                    cwd=job.cwd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                    env=env,
+                    preexec_fn=os.setsid,
+                )
+            except Exception as exc:  # noqa: BLE001
+                with self._lock:
+                    job.status = "failed"
+                    job.finished_at = utc_now()
+                    job.return_code = -1
+                    job.log_lines.append(f"Failed to start process: {exc}\n")
+                return
+
             with self._lock:
-                job.status = "failed"
-                job.finished_at = utc_now()
-                job.return_code = -1
-                job.log_lines.append(f"Failed to start process: {exc}\n")
-            return
+                job.process = process
 
-        with self._lock:
-            job.process = process
+            if not auto_enabled:
+                break
 
+            self._append_log(job, f"[auto] Попытка запуска {attempt}/{auto_max_attempts}\n")
+            assert process.stdout is not None
+            parsed_count = 0
+            first_parse_delay: float | None = None
+            probe_start = time.monotonic()
+
+            while time.monotonic() - probe_start < auto_probe_seconds:
+                if job.stop_requested:
+                    break
+                if process.poll() is not None:
+                    break
+                ready, _, _ = select.select([process.stdout], [], [], 0.5)
+                if not ready:
+                    continue
+                line = process.stdout.readline()
+                if not line:
+                    break
+                self._append_log(job, line)
+                if "Парсинг [" in line:
+                    parsed_count += 1
+                    if first_parse_delay is None:
+                        first_parse_delay = time.monotonic() - probe_start
+
+            elapsed = max(0.001, time.monotonic() - probe_start)
+            rps = parsed_count / elapsed
+            stable = (
+                first_parse_delay is not None
+                and first_parse_delay <= auto_first_deadline
+                and rps >= auto_min_rps
+            )
+            self._append_log(
+                job,
+                f"[auto] Итог попытки {attempt}: records={parsed_count}, "
+                f"first={round(first_parse_delay, 2) if first_parse_delay is not None else 'none'}s, "
+                f"rps={round(rps, 2)}\n",
+            )
+
+            if job.stop_requested:
+                break
+            if stable:
+                self._append_log(job, f"[auto] Стабильный старт найден на попытке {attempt}.\n")
+                break
+            if attempt >= auto_max_attempts:
+                self._append_log(job, "[auto] Лимит попыток исчерпан, продолжаю последний запуск.\n")
+                break
+
+            self._append_log(job, "[auto] Нестабильный старт, перезапуск.\n")
+            self._terminate_process_group(process)
+            process.wait(timeout=10)
+            with self._lock:
+                if job.process is process:
+                    job.process = None
+            time.sleep(1)
+
+        assert process is not None
         assert process.stdout is not None
         for line in process.stdout:
             self._append_log(job, line)
