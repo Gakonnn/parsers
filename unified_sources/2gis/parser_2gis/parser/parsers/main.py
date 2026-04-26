@@ -136,6 +136,14 @@ class MainParser:
 
         return None
 
+    def _find_link_by_href(self, href: str) -> Optional[DOMNode]:
+        """Find clickable link in the current DOM by exact href."""
+        links = self._get_links()
+        for link in links:
+            if link.attributes.get('href') == href:
+                return link
+        return None
+
     def parse(self, writer: FileWriter) -> None:
         """Parse URL with result items.
 
@@ -191,6 +199,8 @@ class MainParser:
             visited_links.update(link_addresses)
             return links
 
+        consecutive_skips = 0
+
         while True:
             # Wait all 2GIS requests get finished
             self._wait_requests_finished()
@@ -201,16 +211,27 @@ class MainParser:
             # We should parse the page if we are not walking
             if not walk_page_number:
                 # Iterate through gathered links
-                for link in links:
+                link_hrefs = [link.attributes['href'] for link in links if 'href' in link.attributes]
+                for link_href in link_hrefs:
+                    resp = None
+                    click_error = None
                     for _ in range(3):  # 3 attempts to get response
+                        link = self._find_link_by_href(link_href)
+                        if link is None:
+                            # List in DOM can be re-rendered while parsing.
+                            self._chrome_remote.wait(0.2)
+                            continue
+
                         # Click the link to provoke request
                         # with a auth key and secret arguments
                         try:
                             self._chrome_remote.perform_click(link)
-                        except Exception:
+                        except Exception as e:
                             # DOM could be re-rendered between snapshot and click,
                             # skip this attempt and try again.
+                            click_error = e
                             resp = None
+                            self._chrome_remote.wait(0.2)
                             continue
 
                         # Delay between clicks, could be usefull if
@@ -241,8 +262,22 @@ class MainParser:
                         # Write API document into a file
                         writer.write(doc)
                         collected_records += 1
+                        consecutive_skips = 0
                     else:
-                        logger.error('Данные не получены, пропуск позиции.')
+                        consecutive_skips += 1
+                        if resp and resp.get('status', 0) < 0:
+                            logger.error('Данные не получены, пропуск позиции. Причина: %s',
+                                         resp.get('statusText', 'unknown'))
+                        elif click_error:
+                            logger.error('Данные не получены, пропуск позиции. Причина: DOM перерисован.')
+                        else:
+                            logger.error('Данные не получены, пропуск позиции.')
+
+                        # If server starts rejecting/breaking requests in a row,
+                        # back off a little and continue.
+                        if consecutive_skips >= 3:
+                            logger.warning('Серия пропусков (%s), пауза 2с для стабилизации.', consecutive_skips)
+                            self._chrome_remote.wait(2)
 
                     # We've reached our limit, bail
                     if collected_records >= self._options.max_records:

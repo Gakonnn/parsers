@@ -179,6 +179,9 @@ def main() -> None:
         # In server environments (no DISPLAY), force headless mode for web UI runs.
         if not os.environ.get('DISPLAY'):
             config.chrome.headless = True
+            if config.parser.delay_between_clicks == 0:
+                # Datacenter IPs are throttled more aggressively by 2GIS.
+                config.parser.delay_between_clicks = 250
         app = web_app
     # Run CLI if we specified all required args, otherwise run GUI.
     elif args.url is None or args.output_path is None or args.format is None:
