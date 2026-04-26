@@ -842,7 +842,7 @@ def parser_definitions() -> dict[str, Any]:
                 {"name": "output_name", "label": "Имя файла", "type": "text", "required": False, "default": ""},
                 {"name": "format", "label": "Формат", "type": "select", "required": True, "default": "xlsx", "options": ["xlsx", "csv", "json"]},
                 {"name": "start_maximized", "label": "Стартовать окно развёрнутым", "type": "checkbox", "required": False, "default": False},
-                {"name": "run_via_agent", "label": "Запускать через mini-агент (ПК пользователя)", "type": "checkbox", "required": False, "default": False},
+                {"name": "run_via_agent", "label": "Запускать через mini-агент (ПК пользователя)", "type": "checkbox", "required": False, "default": True},
                 {"name": "database_url", "label": "PostgreSQL URL", "type": "text", "required": False, "default": DEFAULT_DATABASE_URL},
             ],
         },
