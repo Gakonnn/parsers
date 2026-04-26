@@ -256,11 +256,13 @@ def web_app(urls: list[str] | None, output_path: str | None,
             self.end_headers()
 
         def do_GET(self) -> None:  # noqa: N802
-            if self.path == '/':
+            path = urllib.parse.urlsplit(self.path).path
+
+            if path == '/':
                 self._send_html(_render_page(state))
                 return
 
-            if self.path == '/status':
+            if path == '/status':
                 with state.lock:
                     state.drain_logs()
                     running = state.runner is not None and state.runner.is_alive()
@@ -273,7 +275,7 @@ def web_app(urls: list[str] | None, output_path: str | None,
                 self._send_json(payload)
                 return
 
-            if self.path == '/download':
+            if path == '/download':
                 with state.lock:
                     output_path = state.output_path
                 if not output_path:
@@ -285,7 +287,9 @@ def web_app(urls: list[str] | None, output_path: str | None,
             self.send_error(404)
 
         def do_POST(self) -> None:  # noqa: N802
-            if self.path == '/start':
+            path = urllib.parse.urlsplit(self.path).path
+
+            if path == '/start':
                 content_length = int(self.headers.get('Content-Length', '0'))
                 form_data = urllib.parse.parse_qs(self.rfile.read(content_length).decode('utf-8'))
 
@@ -308,7 +312,7 @@ def web_app(urls: list[str] | None, output_path: str | None,
                 self._redirect_home()
                 return
 
-            if self.path == '/stop':
+            if path == '/stop':
                 with state.lock:
                     if state.runner is not None and state.runner.is_alive():
                         state.stop_requested = True
