@@ -101,7 +101,10 @@ def handle_run(args: argparse.Namespace) -> int:
     env["PYTHONUNBUFFERED"] = "1"
     output_target = str(getattr(args, "output_target", "file")).strip().lower()
     database_url = str(getattr(args, "database_url", "")).strip() or os.environ.get("DATABASE_URL", "").strip()
-    live_db_supported_sources = {"krisha", "2gis"}
+    live_db_supported_sources = {"krisha"}
+    live_db_2gis_env = os.environ.get("PARSERS_2GIS_LIVE_DB", "").strip().lower()
+    if live_db_2gis_env in {"1", "true", "yes", "on"}:
+        live_db_supported_sources.add("2gis")
     live_db_enabled = (
         adapter.key in live_db_supported_sources
         and output_target in {"db", "both"}
