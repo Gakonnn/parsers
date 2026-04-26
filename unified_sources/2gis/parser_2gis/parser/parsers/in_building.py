@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from typing import TYPE_CHECKING
 
 from ...common import wait_until_finished
 from ...logger import logger
+from ..exceptions import ParserTooManySkips
 from .main import MainParser
 
 if TYPE_CHECKING:
@@ -63,6 +65,8 @@ class InBuildingParser(MainParser):
 
         # Parsed records
         collected_records = 0
+        consecutive_skips = 0
+        skip_streak_limit = max(3, int(os.environ.get('PARSER2GIS_SKIP_STREAK_LIMIT', '6')))
 
         # Already visited links
         visited_links: set[str] = set()
@@ -130,8 +134,17 @@ class InBuildingParser(MainParser):
                     # Write API document into a file
                     writer.write(doc)
                     collected_records += 1
+                    consecutive_skips = 0
                 else:
+                    consecutive_skips += 1
                     logger.error('Данные не получены, пропуск позиции.')
+                    if consecutive_skips >= 3:
+                        logger.warning('Серия пропусков (%s), пауза 2с для стабилизации.', consecutive_skips)
+                        self._chrome_remote.wait(2)
+                    if consecutive_skips >= skip_streak_limit:
+                        raise ParserTooManySkips(
+                            f'too many consecutive skipped items ({consecutive_skips})'
+                        )
 
                 # We've reached our limit, bail
                 if collected_records >= self._options.max_records:

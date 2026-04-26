@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import urllib.parse
 from typing import TYPE_CHECKING, Optional
@@ -9,6 +10,7 @@ from typing import TYPE_CHECKING, Optional
 from ...chrome import ChromeRemote
 from ...common import wait_until_finished
 from ...logger import logger
+from ..exceptions import ParserTooManySkips
 from ..utils import blocked_requests
 
 if TYPE_CHECKING:
@@ -246,6 +248,7 @@ class MainParser:
             return links
 
         consecutive_skips = 0
+        skip_streak_limit = max(3, int(os.environ.get('PARSER2GIS_SKIP_STREAK_LIMIT', '6')))
 
         while True:
             # Wait all 2GIS requests get finished
@@ -333,10 +336,14 @@ class MainParser:
                             logger.error('Данные не получены, пропуск позиции.')
 
                         # If server starts rejecting/breaking requests in a row,
-                        # back off a little and continue.
+                        # back off a little and recycle session via runner retry.
                         if consecutive_skips >= 3:
                             logger.warning('Серия пропусков (%s), пауза 2с для стабилизации.', consecutive_skips)
                             self._chrome_remote.wait(2)
+                        if consecutive_skips >= skip_streak_limit:
+                            raise ParserTooManySkips(
+                                f'too many consecutive skipped items ({consecutive_skips})'
+                            )
 
                     # We've reached our limit, bail
                     if collected_records >= self._options.max_records:

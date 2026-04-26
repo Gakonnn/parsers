@@ -1,7 +1,7 @@
 from .chrome.exceptions import (ChromeException, ChromePathNotFound,
                                 ChromeRuntimeException,
                                 ChromeUserAbortException)
-from .parser.exceptions import ParserException
+from .parser.exceptions import ParserException, ParserTooManySkips
 from .writer.exceptions import WriterUnknownFileFormat
 
 __all__ = [
@@ -10,5 +10,6 @@ __all__ = [
     'ChromeRuntimeException',
     'ChromeUserAbortException',
     'ParserException',
+    'ParserTooManySkips',
     'WriterUnknownFileFormat',
 ]
