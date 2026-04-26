@@ -1884,6 +1884,10 @@ class AppHandler(BaseHTTPRequestHandler):
     def _serve_static(self, path: str) -> None:
         if path in {"/", ""}:
             target = STATIC_DIR / "index.html"
+        elif path in {"/db", "/db/"}:
+            target = STATIC_DIR / "db.html"
+        elif path in {"/export", "/export/"}:
+            target = STATIC_DIR / "export.html"
         else:
             safe_path = path.lstrip("/")
             target = (STATIC_DIR / safe_path).resolve()

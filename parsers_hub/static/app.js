@@ -35,6 +35,7 @@ const state = {
     jobs: [],
   },
 };
+const currentPage = document.body?.dataset?.page || "hub";
 
 const tabsEl = document.getElementById("parser-tabs");
 const formFieldsEl = document.getElementById("form-fields");
@@ -102,6 +103,7 @@ function jobStatusLabel(status) {
 }
 
 function renderTabs() {
+  if (!tabsEl) return;
   tabsEl.innerHTML = "";
   Object.entries(state.parsers).forEach(([key, parser]) => {
     const button = document.createElement("button");
@@ -118,6 +120,7 @@ function renderTabs() {
 }
 
 function setFormMessage(text, type = "info") {
+  if (!formMessageEl) return;
   formMessageEl.textContent = text;
   formMessageEl.classList.remove("success", "error");
   if (type === "success") formMessageEl.classList.add("success");
@@ -133,6 +136,7 @@ function setExportMessage(text, type = "info") {
 }
 
 function renderForm() {
+  if (!formFieldsEl || !formEl) return;
   const parser = state.parsers[state.selectedParser];
   if (!parser) return;
   formFieldsEl.innerHTML = "";
@@ -219,7 +223,9 @@ function renderForm() {
 }
 
 function collectFormPayload() {
+  if (!formEl) return {};
   const parser = state.parsers[state.selectedParser];
+  if (!parser) return {};
   const payload = {};
   parser.fields.forEach((field) => {
     const input = formEl.elements[field.name];
@@ -586,6 +592,7 @@ function render2gisRubricPicker() {
 }
 
 function renderJobs() {
+  if (!jobsListEl) return;
   const query = jobsSearchQuery.trim().toLowerCase();
   const jobsToRender = !query ? state.jobs : state.jobs.filter((job) => {
     const haystack = `${job.job_id} ${job.parser_key} ${job.status} ${job.output_path || ""}`.toLowerCase();
@@ -634,6 +641,7 @@ function updateHeaderStats() {
 }
 
 function renderJobDetails(job) {
+  if (!jobDetailsEl) return;
   if (!job) {
     jobDetailsEl.className = "job-details empty-state";
     jobDetailsEl.textContent = "Выберите задачу справа, чтобы посмотреть детали запуска.";
@@ -641,7 +649,7 @@ function renderJobDetails(job) {
   }
 
   jobDetailsEl.className = "job-details";
-  const command = job.command.map((part) => {
+  const command = (job.command || []).map((part) => {
     return /\s/.test(part) ? `"${part}"` : part;
   }).join(" ");
   const canPause = job.status === "running";
@@ -704,7 +712,7 @@ function renderJobDetails(job) {
     </div>
     <div class="detail-card">
       <div class="detail-title" style="margin-bottom:10px;">Лог</div>
-      <pre class="log-box">${escapeHtml(job.log || "Лог пока пуст.")}</pre>
+      <pre class="log-box">${escapeHtml(trimLog(job.log || "Лог пока пуст."))}</pre>
     </div>
   `;
 
@@ -778,6 +786,15 @@ function formatDateTime(value) {
   }).format(date);
 }
 
+function trimLog(value, maxChars = 200000, maxLines = 1500) {
+  const text = String(value || "");
+  const lines = text.split("\n");
+  const tailLines = lines.length > maxLines ? lines.slice(-maxLines) : lines;
+  const tailText = tailLines.join("\n");
+  if (tailText.length <= maxChars) return tailText;
+  return tailText.slice(tailText.length - maxChars);
+}
+
 function clip(value, maxLen = 120) {
   const text = String(value || "").trim();
   if (!text) return "—";
@@ -785,6 +802,7 @@ function clip(value, maxLen = 120) {
 }
 
 function renderDbTable() {
+  if (!dbResultsBodyEl || !dbSummaryEl) return;
   const records = state.db.records;
   if (!records.length) {
     dbResultsBodyEl.innerHTML = `<tr><td colspan="11" class="db-empty">Нет записей по текущим фильтрам.</td></tr>`;
@@ -949,6 +967,7 @@ function buildDbQuery(filters) {
 }
 
 function syncDbFormWithState() {
+  if (!dbSourceEl || !dbRunStatusEl || !dbHasPhoneEl || !dbSearchEl || !dbLimitEl) return;
   dbSourceEl.value = state.db.filters.source || "";
   dbRunStatusEl.value = state.db.filters.run_status || "";
   dbHasPhoneEl.value = state.db.filters.has_phone || "";
@@ -957,6 +976,7 @@ function syncDbFormWithState() {
 }
 
 async function loadDbRecords() {
+  if (!dbResultsBodyEl || !dbSummaryEl) return;
   try {
     const query = buildDbQuery(state.db.filters);
     const data = await api(`/api/db/records?${query}`);
@@ -966,8 +986,12 @@ async function loadDbRecords() {
     state.db.pages = data.pages || 1;
     renderDbTable();
   } catch (error) {
-    dbResultsBodyEl.innerHTML = `<tr><td colspan="11" class="db-empty">Ошибка загрузки БД: ${escapeHtml(error.message)}</td></tr>`;
-    dbSummaryEl.textContent = "Ошибка загрузки.";
+    if (dbResultsBodyEl) {
+      dbResultsBodyEl.innerHTML = `<tr><td colspan="11" class="db-empty">Ошибка загрузки БД: ${escapeHtml(error.message)}</td></tr>`;
+    }
+    if (dbSummaryEl) {
+      dbSummaryEl.textContent = "Ошибка загрузки.";
+    }
     updateHeaderStats();
   }
 }
@@ -1003,51 +1027,53 @@ async function loadJobDetails() {
   }
 }
 
-formEl.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  setFormMessage("Запускаю задачу...");
-  try {
-    if (state.selectedParser === "olx" && !state.olxCategories.manualUrl) {
-      const level1El = document.getElementById("olx-level1");
-      const level2El = document.getElementById("olx-level2");
-      const level3El = document.getElementById("olx-level3");
-      const categoryUrlInput = formEl.elements.category_url;
-      if (categoryUrlInput && level1El) {
-        const url = buildOlxCategoryUrl(level1El.value, level2El?.value || "", level3El?.value || "");
-        if (url) categoryUrlInput.value = url;
+if (formEl) {
+  formEl.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    setFormMessage("Запускаю задачу...");
+    try {
+      if (state.selectedParser === "olx" && !state.olxCategories.manualUrl) {
+        const level1El = document.getElementById("olx-level1");
+        const level2El = document.getElementById("olx-level2");
+        const level3El = document.getElementById("olx-level3");
+        const categoryUrlInput = formEl.elements.category_url;
+        if (categoryUrlInput && level1El) {
+          const url = buildOlxCategoryUrl(level1El.value, level2El?.value || "", level3El?.value || "");
+          if (url) categoryUrlInput.value = url;
+        }
       }
-    }
 
-    if (state.selectedParser === "2gis") {
-      const domainEl = document.getElementById("rubric-domain");
-      const cityEl = document.getElementById("rubric-city");
-      const level1El = document.getElementById("rubric-level1");
-      const level2El = document.getElementById("rubric-level2");
-      const level3El = document.getElementById("rubric-level3");
-      const searchUrlInput = formEl.elements.search_url;
-      if (domainEl && cityEl && searchUrlInput) {
-        const rubric = (level3El?.value || level2El?.value || level1El?.value || "").trim();
-        const url = build2gisSearchUrl(domainEl.value, cityEl.value, rubric);
-        if (url) searchUrlInput.value = url;
+      if (state.selectedParser === "2gis") {
+        const domainEl = document.getElementById("rubric-domain");
+        const cityEl = document.getElementById("rubric-city");
+        const level1El = document.getElementById("rubric-level1");
+        const level2El = document.getElementById("rubric-level2");
+        const level3El = document.getElementById("rubric-level3");
+        const searchUrlInput = formEl.elements.search_url;
+        if (domainEl && cityEl && searchUrlInput) {
+          const rubric = (level3El?.value || level2El?.value || level1El?.value || "").trim();
+          const url = build2gisSearchUrl(domainEl.value, cityEl.value, rubric);
+          if (url) searchUrlInput.value = url;
+        }
       }
+      const payload = collectFormPayload();
+      const data = await api("/api/run", {
+        method: "POST",
+        body: JSON.stringify({
+          parser_key: state.selectedParser,
+          payload,
+        }),
+      });
+      setFormMessage(`Задача ${data.job.job_id} запущена.`, "success");
+      state.selectedJobId = data.job.job_id;
+      await refreshJobs();
+      await loadJobDetails();
+      await loadDbTotalsOnly();
+    } catch (error) {
+      setFormMessage(error.message, "error");
     }
-    const payload = collectFormPayload();
-    const data = await api("/api/run", {
-      method: "POST",
-      body: JSON.stringify({
-        parser_key: state.selectedParser,
-        payload,
-      }),
-    });
-    setFormMessage(`Задача ${data.job.job_id} запущена.`, "success");
-    state.selectedJobId = data.job.job_id;
-    await refreshJobs();
-    await loadJobDetails();
-    await loadDbRecords();
-  } catch (error) {
-    setFormMessage(error.message, "error");
-  }
-});
+  });
+}
 
 dbFilterFormEl?.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -1108,27 +1134,67 @@ jobsSearchEl?.addEventListener("input", () => {
   renderJobs();
 });
 
-async function boot() {
-  syncDbFormWithState();
+async function loadDbTotalsOnly() {
+  try {
+    const data = await api("/api/db/records?limit=1&page=1");
+    state.db.total = data.total || 0;
+    updateHeaderStats();
+  } catch {
+    // Ignore totals refresh errors to avoid noisy UX.
+  }
+}
+
+function startPolling(task, intervalMs) {
+  return window.setInterval(() => {
+    if (document.hidden) return;
+    task().catch(() => {});
+  }, intervalMs);
+}
+
+async function bootHubPage() {
   await loadConfig();
-  await loadExportConfig();
   await refreshJobs();
   await loadJobDetails();
-  await loadDbRecords();
-  await loadExportJobs();
+  await loadDbTotalsOnly();
 
-  window.setInterval(async () => {
+  startPolling(async () => {
     await refreshJobs();
     await loadJobDetails();
-  }, 2500);
+  }, 3000);
 
-  window.setInterval(async () => {
-    await loadDbRecords();
-  }, 6000);
+  startPolling(loadDbTotalsOnly, 12000);
+}
 
-  window.setInterval(async () => {
-    await loadExportJobs();
-  }, 2500);
+async function bootDbPage() {
+  syncDbFormWithState();
+  await refreshJobs();
+  await loadDbRecords();
+
+  startPolling(loadDbRecords, 12000);
+  startPolling(refreshJobs, 15000);
+}
+
+async function bootExportPage() {
+  await loadExportConfig();
+  await loadExportJobs();
+  await refreshJobs();
+  await loadDbTotalsOnly();
+
+  startPolling(loadExportJobs, 5000);
+  startPolling(refreshJobs, 15000);
+  startPolling(loadDbTotalsOnly, 15000);
+}
+
+async function boot() {
+  if (currentPage === "db") {
+    await bootDbPage();
+    return;
+  }
+  if (currentPage === "export") {
+    await bootExportPage();
+    return;
+  }
+  await bootHubPage();
 }
 
 boot().catch((error) => {

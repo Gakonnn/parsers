@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Parsers Hub • Выгрузка Из БД</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="export">
+    <div class="bg-orb bg-orb-1"></div>
+    <div class="bg-orb bg-orb-2"></div>
+    <div class="page-shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <p class="eyebrow">Parsers Control Center</p>
+          <h1>Выгрузка Из Базы Данных</h1>
+          <p class="hero-text">Отдельная страница для экспорта: форматы, поля, фильтры и прогресс без лишней нагрузки.</p>
+          <nav class="main-nav" aria-label="Разделы">
+            <a class="main-nav-link" href="/">Хаб</a>
+            <a class="main-nav-link" href="/db.html">Результаты БД</a>
+            <a class="main-nav-link active" href="/export.html">Выгрузка Из БД</a>
+          </nav>
+        </div>
+        <div class="stats-strip">
+          <div class="stat-chip">
+            <span>Всего задач</span>
+            <strong id="stat-total-jobs">0</strong>
+          </div>
+          <div class="stat-chip">
+            <span>Активные</span>
+            <strong id="stat-running-jobs">0</strong>
+          </div>
+          <div class="stat-chip">
+            <span>Записей в БД</span>
+            <strong id="stat-db-total">0</strong>
+          </div>
+        </div>
+      </header>
+
+      <main class="dashboard single">
+        <section class="panel db-export-panel panel-elevated">
+          <div class="panel-header">
+            <h2>Выгрузка Из БД</h2>
+            <p>Создавай выгрузки с выбором источника, полей, формата и фильтров по дате/времени.</p>
+          </div>
+
+          <form id="db-export-form" class="db-export-form">
+            <div class="db-export-grid">
+              <select id="export-source" name="source">
+                <option value="">Все источники</option>
+                <option value="olx">OLX</option>
+                <option value="krisha">Krisha</option>
+                <option value="2gis">2GIS</option>
+              </select>
+              <select id="export-format" name="format">
+                <option value="xlsx">Excel (.xlsx)</option>
+                <option value="csv">CSV (.csv)</option>
+              </select>
+              <select id="export-run-status" name="run_status">
+                <option value="">Любой статус запуска</option>
+                <option value="running">running</option>
+                <option value="completed">completed</option>
+                <option value="failed">failed</option>
+                <option value="stopped">stopped</option>
+                <option value="paused">paused</option>
+                <option value="queued">queued</option>
+              </select>
+              <select id="export-has-phone" name="has_phone">
+                <option value="">Телефон: любой</option>
+                <option value="yes">Только с телефоном</option>
+                <option value="no">Только без телефона</option>
+              </select>
+              <input id="export-date-from" name="date_from" type="datetime-local" />
+              <input id="export-date-to" name="date_to" type="datetime-local" />
+              <input id="export-search" name="search" type="text" placeholder="Поиск по title/id/url/данным..." />
+              <input id="export-max-rows" name="max_rows" type="number" min="1" max="500000" value="50000" />
+              <input id="export-file-name" name="file_name" type="text" placeholder="Имя файла (опционально)" />
+            </div>
+
+            <div class="db-export-fields-head">
+              <strong>Поля Для Выгрузки</strong>
+              <button id="export-fields-all" class="ghost-button" type="button">Выбрать все</button>
+            </div>
+            <div id="db-export-fields" class="db-export-fields"></div>
+
+            <div class="db-export-actions">
+              <button class="primary-button" type="submit">Старт выгрузки</button>
+            </div>
+          </form>
+
+          <p id="db-export-message" class="form-message" role="status" aria-live="polite"></p>
+          <div id="db-export-jobs" class="db-export-jobs">
+            <div class="empty-state">Здесь появятся задачи выгрузки.</div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

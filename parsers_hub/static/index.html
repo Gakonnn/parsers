@@ -9,7 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body>
+  <body data-page="hub">
     <div class="bg-orb bg-orb-1"></div>
     <div class="bg-orb bg-orb-2"></div>
     <div class="page-shell">
@@ -17,7 +17,12 @@
         <div class="brand-block">
           <p class="eyebrow">Parsers Control Center</p>
           <h1>Один хаб для OLX, 2GIS и Krisha</h1>
-          <p class="hero-text">Красивый минималистичный интерфейс для запуска, мониторинга и анализа результатов.</p>
+          <p class="hero-text">Красивый минималистичный интерфейс для запуска и мониторинга задач.</p>
+          <nav class="main-nav" aria-label="Разделы">
+            <a class="main-nav-link active" href="/">Хаб</a>
+            <a class="main-nav-link" href="/db.html">Результаты БД</a>
+            <a class="main-nav-link" href="/export.html">Выгрузка Из БД</a>
+          </nav>
         </div>
         <div class="stats-strip">
           <div class="stat-chip">
@@ -71,125 +76,6 @@
           </div>
           <div id="job-details" class="job-details empty-state">
             Выберите задачу справа, чтобы посмотреть детали запуска.
-          </div>
-        </section>
-
-        <section class="panel db-panel panel-elevated">
-          <div class="panel-header">
-            <h2>Результаты БД</h2>
-            <p>Фильтрация и просмотр данных в таблице с фиксированным заголовком.</p>
-          </div>
-
-          <form id="db-filter-form" class="db-filter-form">
-            <select id="db-source" name="source">
-              <option value="">Все источники</option>
-              <option value="olx">OLX</option>
-              <option value="krisha">Krisha</option>
-              <option value="2gis">2GIS</option>
-            </select>
-            <select id="db-run-status" name="run_status">
-              <option value="">Любой статус запуска</option>
-              <option value="running">running</option>
-              <option value="completed">completed</option>
-              <option value="failed">failed</option>
-              <option value="stopped">stopped</option>
-              <option value="paused">paused</option>
-              <option value="queued">queued</option>
-            </select>
-            <select id="db-has-phone" name="has_phone">
-              <option value="">Телефон: любой</option>
-              <option value="yes">Есть телефон</option>
-              <option value="no">Нет телефона</option>
-            </select>
-            <input id="db-search" name="search" type="text" placeholder="Поиск: title, id, phone, url..." />
-            <select id="db-limit" name="limit">
-              <option value="50">50</option>
-              <option value="100" selected>100</option>
-              <option value="200">200</option>
-            </select>
-            <button class="ghost-button" type="submit">Применить</button>
-          </form>
-
-          <div id="db-summary" class="db-summary">Загрузка...</div>
-          <div class="db-table-wrap">
-            <table class="db-table">
-              <thead>
-                <tr>
-                  <th>Время</th>
-                  <th>Source</th>
-                  <th>Run</th>
-                  <th>ID</th>
-                  <th>Title / Name</th>
-                  <th>Phone</th>
-                  <th>Price</th>
-                  <th>Location</th>
-                  <th>Status</th>
-                  <th>Error</th>
-                  <th>URL</th>
-                </tr>
-              </thead>
-              <tbody id="db-results-body"></tbody>
-            </table>
-          </div>
-          <div class="db-pagination">
-            <button class="ghost-button" type="button" id="db-prev-page">Назад</button>
-            <button class="ghost-button" type="button" id="db-next-page">Вперёд</button>
-          </div>
-        </section>
-
-        <section class="panel db-export-panel panel-elevated">
-          <div class="panel-header">
-            <h2>Выгрузка Из БД</h2>
-            <p>Создавай выгрузки с выбором источника, полей, формата и фильтров по дате/времени.</p>
-          </div>
-
-          <form id="db-export-form" class="db-export-form">
-            <div class="db-export-grid">
-              <select id="export-source" name="source">
-                <option value="">Все источники</option>
-                <option value="olx">OLX</option>
-                <option value="krisha">Krisha</option>
-                <option value="2gis">2GIS</option>
-              </select>
-              <select id="export-format" name="format">
-                <option value="xlsx">Excel (.xlsx)</option>
-                <option value="csv">CSV (.csv)</option>
-              </select>
-              <select id="export-run-status" name="run_status">
-                <option value="">Любой статус запуска</option>
-                <option value="running">running</option>
-                <option value="completed">completed</option>
-                <option value="failed">failed</option>
-                <option value="stopped">stopped</option>
-                <option value="paused">paused</option>
-                <option value="queued">queued</option>
-              </select>
-              <select id="export-has-phone" name="has_phone">
-                <option value="">Телефон: любой</option>
-                <option value="yes">Только с телефоном</option>
-                <option value="no">Только без телефона</option>
-              </select>
-              <input id="export-date-from" name="date_from" type="datetime-local" />
-              <input id="export-date-to" name="date_to" type="datetime-local" />
-              <input id="export-search" name="search" type="text" placeholder="Поиск по title/id/url/данным..." />
-              <input id="export-max-rows" name="max_rows" type="number" min="1" max="500000" value="50000" />
-              <input id="export-file-name" name="file_name" type="text" placeholder="Имя файла (опционально)" />
-            </div>
-
-            <div class="db-export-fields-head">
-              <strong>Поля Для Выгрузки</strong>
-              <button id="export-fields-all" class="ghost-button" type="button">Выбрать все</button>
-            </div>
-            <div id="db-export-fields" class="db-export-fields"></div>
-
-            <div class="db-export-actions">
-              <button class="primary-button" type="submit">Старт выгрузки</button>
-            </div>
-          </form>
-
-          <p id="db-export-message" class="form-message" role="status" aria-live="polite"></p>
-          <div id="db-export-jobs" class="db-export-jobs">
-            <div class="empty-state">Здесь появятся задачи выгрузки.</div>
           </div>
         </section>
       </main>

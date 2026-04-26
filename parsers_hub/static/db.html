@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Parsers Hub • Результаты БД</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="db">
+    <div class="bg-orb bg-orb-1"></div>
+    <div class="bg-orb bg-orb-2"></div>
+    <div class="page-shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <p class="eyebrow">Parsers Control Center</p>
+          <h1>Результаты Базы Данных</h1>
+          <p class="hero-text">Быстрый просмотр и фильтрация записей без нагрузки от остальных модулей.</p>
+          <nav class="main-nav" aria-label="Разделы">
+            <a class="main-nav-link" href="/">Хаб</a>
+            <a class="main-nav-link active" href="/db.html">Результаты БД</a>
+            <a class="main-nav-link" href="/export.html">Выгрузка Из БД</a>
+          </nav>
+        </div>
+        <div class="stats-strip">
+          <div class="stat-chip">
+            <span>Всего задач</span>
+            <strong id="stat-total-jobs">0</strong>
+          </div>
+          <div class="stat-chip">
+            <span>Активные</span>
+            <strong id="stat-running-jobs">0</strong>
+          </div>
+          <div class="stat-chip">
+            <span>Записей в БД</span>
+            <strong id="stat-db-total">0</strong>
+          </div>
+        </div>
+      </header>
+
+      <main class="dashboard single">
+        <section class="panel db-panel panel-elevated">
+          <div class="panel-header">
+            <h2>Результаты БД</h2>
+            <p>Фильтрация и просмотр данных в таблице с фиксированным заголовком.</p>
+          </div>
+
+          <form id="db-filter-form" class="db-filter-form">
+            <select id="db-source" name="source">
+              <option value="">Все источники</option>
+              <option value="olx">OLX</option>
+              <option value="krisha">Krisha</option>
+              <option value="2gis">2GIS</option>
+            </select>
+            <select id="db-run-status" name="run_status">
+              <option value="">Любой статус запуска</option>
+              <option value="running">running</option>
+              <option value="completed">completed</option>
+              <option value="failed">failed</option>
+              <option value="stopped">stopped</option>
+              <option value="paused">paused</option>
+              <option value="queued">queued</option>
+            </select>
+            <select id="db-has-phone" name="has_phone">
+              <option value="">Телефон: любой</option>
+              <option value="yes">Есть телефон</option>
+              <option value="no">Нет телефона</option>
+            </select>
+            <input id="db-search" name="search" type="text" placeholder="Поиск: title, id, phone, url..." />
+            <select id="db-limit" name="limit">
+              <option value="50">50</option>
+              <option value="100" selected>100</option>
+              <option value="200">200</option>
+            </select>
+            <button class="ghost-button" type="submit">Применить</button>
+          </form>
+
+          <div id="db-summary" class="db-summary">Загрузка...</div>
+          <div class="db-table-wrap">
+            <table class="db-table">
+              <thead>
+                <tr>
+                  <th>Время</th>
+                  <th>Source</th>
+                  <th>Run</th>
+                  <th>ID</th>
+                  <th>Title / Name</th>
+                  <th>Phone</th>
+                  <th>Price</th>
+                  <th>Location</th>
+                  <th>Status</th>
+                  <th>Error</th>
+                  <th>URL</th>
+                </tr>
+              </thead>
+              <tbody id="db-results-body"></tbody>
+            </table>
+          </div>
+          <div class="db-pagination">
+            <button class="ghost-button" type="button" id="db-prev-page">Назад</button>
+            <button class="ghost-button" type="button" id="db-next-page">Вперёд</button>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
