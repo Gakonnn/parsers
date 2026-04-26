@@ -263,6 +263,9 @@ class MainParser:
                     click_error = None
                     doc = None
                     for _ in range(3):  # 3 attempts to get response
+                        # Drop stale buffered responses before current click.
+                        self._chrome_remote.clear_response_queue(self._item_response_pattern)
+
                         link = self._find_link_by_href(link_href)
                         if link is None:
                             # List in DOM can be re-rendered while parsing.
@@ -285,9 +288,6 @@ class MainParser:
                         # 2GIS's anti-bot service become more strict.
                         if self._options.delay_between_clicks:
                             self._chrome_remote.wait(self._options.delay_between_clicks / 1000)
-
-                        # Consume only fresh network payload produced by current click.
-                        self._chrome_remote.clear_response_queue(self._item_response_pattern)
 
                         # Gather response and collect useful payload.
                         resp = self._chrome_remote.wait_response(self._item_response_pattern)

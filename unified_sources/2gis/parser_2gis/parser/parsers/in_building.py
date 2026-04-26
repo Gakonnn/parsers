@@ -87,7 +87,11 @@ class InBuildingParser(MainParser):
 
             # Iterate through gathered links
             for link in links:
+                resp = None
                 for _ in range(3):  # 3 attempts to get response
+                    # Drop stale buffered responses before current click.
+                    self._chrome_remote.clear_response_queue(self._item_response_pattern)
+
                     # Click the link to provoke request
                     # with a auth key and secret arguments
                     try:
