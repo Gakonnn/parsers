@@ -69,7 +69,14 @@ def locate_chrome_path() -> str | None:
 
     else:
         app_dirs = ['/usr/bin', '/usr/sbin', '/usr/local/bin', '/usr/local/sbin', '/sbin', '/opt/google/chrome']
-        browser_executables = ['google-chrome', 'chrome', 'chrome-browser', 'google-chrome-stable']
+        browser_executables = [
+            'google-chrome',
+            'chrome',
+            'chrome-browser',
+            'google-chrome-stable',
+            'chromium',
+            'chromium-browser',
+        ]
         for d in app_dirs:
             for f in browser_executables:
                 binary_path = os.path.join(d, f)

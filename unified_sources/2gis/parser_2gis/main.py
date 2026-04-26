@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from typing import Any
 
 import pydantic
@@ -175,6 +176,9 @@ def main() -> None:
         user_config = Configuration.load_config(auto_create=True)
         user_config.merge_with(command_line_config)
         config = user_config
+        # In server environments (no DISPLAY), force headless mode for web UI runs.
+        if not os.environ.get('DISPLAY'):
+            config.chrome.headless = True
         app = web_app
     # Run CLI if we specified all required args, otherwise run GUI.
     elif args.url is None or args.output_path is None or args.format is None:

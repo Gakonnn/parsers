@@ -37,6 +37,7 @@ class ChromeBrowser():
             f'--remote-debugging-port={self._remote_port}',
             f'--user-data-dir={self._profile_path}', '--no-default-browser-check',
             '--no-first-run', '--no-sandbox', '--disable-fre',
+            '--disable-dev-shm-usage', '--no-zygote',
             '--remote-allow-origins=*',
             f'--js-flags=--expose-gc --max-old-space-size={chrome_options.memory_limit}',
         ]
@@ -46,7 +47,7 @@ class ChromeBrowser():
 
         if chrome_options.headless:
             logger.debug('В Chrome установлен в скрытый режим.')
-            self._chrome_cmd.append('--headless')
+            self._chrome_cmd.append('--headless=new')
             self._chrome_cmd.append('--disable-gpu')
 
         if chrome_options.disable_images:
