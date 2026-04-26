@@ -146,6 +146,34 @@ class MainParser:
                 return link
         return None
 
+    @staticmethod
+    def _valid_catalog_document(doc: dict) -> bool:
+        """Check that response payload contains an organization card."""
+        try:
+            items = doc['result']['items']
+            if not items:
+                return False
+            item = items[0]
+            if not isinstance(item, dict):
+                return False
+
+            item_type = item.get('type', '')
+            unsupported_types = {
+                'project',
+                'adm_div.city',
+                'adm_div.region',
+                'adm_div.country',
+                'adm_div.district',
+                'adm_div.district_area',
+            }
+            if item_type in unsupported_types:
+                return False
+
+            # Normal organization cards contain locale, required by writer models.
+            return 'locale' in item
+        except Exception:
+            return False
+
     def parse(self, writer: FileWriter) -> None:
         """Parse URL with result items.
 
@@ -217,6 +245,7 @@ class MainParser:
                 for link_href in link_hrefs:
                     resp = None
                     click_error = None
+                    doc = None
                     for _ in range(3):  # 3 attempts to get response
                         link = self._find_link_by_href(link_href)
                         if link is None:
@@ -244,21 +273,23 @@ class MainParser:
                         # Gather response and collect useful payload.
                         resp = self._chrome_remote.wait_response(self._item_response_pattern)
 
-                        # If request is failed - repeat, otherwise go further.
-                        if resp and resp['status'] >= 0:
-                            break
+                        # If request is failed - repeat.
+                        if not resp or resp['status'] < 0:
+                            continue
 
-                    # Get response body data
-                    if resp and resp['status'] >= 0:
-                        data = self._chrome_remote.get_response_body(resp, timeout=10) if resp else None
-
+                        # Get response body and validate payload.
+                        data = self._chrome_remote.get_response_body(resp, timeout=10)
                         try:
-                            doc = json.loads(data)
+                            parsed_doc = json.loads(data)
                         except json.JSONDecodeError:
                             logger.error('Сервер вернул некорректный JSON документ: "%s", пропуск позиции.', data)
-                            doc = None
-                    else:
-                        doc = None
+                            continue
+
+                        if self._valid_catalog_document(parsed_doc):
+                            doc = parsed_doc
+                            break
+                        else:
+                            logger.debug('Пропуск нерелевантного ответа каталога.')
 
                     if doc:
                         # Write API document into a file
