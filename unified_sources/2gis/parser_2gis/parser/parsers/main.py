@@ -286,6 +286,9 @@ class MainParser:
                         if self._options.delay_between_clicks:
                             self._chrome_remote.wait(self._options.delay_between_clicks / 1000)
 
+                        # Consume only fresh network payload produced by current click.
+                        self._chrome_remote.clear_response_queue(self._item_response_pattern)
+
                         # Gather response and collect useful payload.
                         resp = self._chrome_remote.wait_response(self._item_response_pattern)
 

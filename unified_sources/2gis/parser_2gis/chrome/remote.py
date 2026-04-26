@@ -269,6 +269,22 @@ class ChromeRemote:
         with self._requests_lock:
             self._requests = {}
 
+    def clear_response_queue(self, response_pattern: str | None = None) -> None:
+        """Drop already buffered responses from queue(s).
+
+        Useful before a click when parser expects a fresh response only.
+        """
+        patterns = [response_pattern] if response_pattern else self._response_patterns
+        for pattern in patterns:
+            q = self._response_queues.get(pattern)
+            if not q:
+                continue
+            while True:
+                try:
+                    q.get_nowait()
+                except queue.Empty:
+                    break
+
     @wait_until_finished(timeout=15, throw_exception=False)
     def get_response_body(self, response: Response) -> str:
         """Get response body.
