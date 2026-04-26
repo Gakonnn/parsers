@@ -3,6 +3,19 @@ const state = {
   selectedParser: null,
   jobs: [],
   selectedJobId: null,
+  rubrics2gis: {
+    loaded: false,
+    loading: false,
+    error: "",
+    level1: [],
+  },
+  olxCategories: {
+    loaded: false,
+    loading: false,
+    error: "",
+    level1: [],
+    manualUrl: false,
+  },
   db: {
     records: [],
     total: 0,
@@ -17,6 +30,10 @@ const state = {
       page: 1,
     },
   },
+  exports: {
+    fields: [],
+    jobs: [],
+  },
 };
 
 const tabsEl = document.getElementById("parser-tabs");
@@ -25,6 +42,10 @@ const formEl = document.getElementById("run-form");
 const formMessageEl = document.getElementById("form-message");
 const jobsListEl = document.getElementById("jobs-list");
 const jobDetailsEl = document.getElementById("job-details");
+const jobsSearchEl = document.getElementById("jobs-search");
+const statTotalJobsEl = document.getElementById("stat-total-jobs");
+const statRunningJobsEl = document.getElementById("stat-running-jobs");
+const statDbTotalEl = document.getElementById("stat-db-total");
 
 const dbFilterFormEl = document.getElementById("db-filter-form");
 const dbSummaryEl = document.getElementById("db-summary");
@@ -36,6 +57,21 @@ const dbRunStatusEl = document.getElementById("db-run-status");
 const dbHasPhoneEl = document.getElementById("db-has-phone");
 const dbSearchEl = document.getElementById("db-search");
 const dbLimitEl = document.getElementById("db-limit");
+const dbExportFormEl = document.getElementById("db-export-form");
+const dbExportFieldsEl = document.getElementById("db-export-fields");
+const dbExportFieldsAllEl = document.getElementById("export-fields-all");
+const dbExportJobsEl = document.getElementById("db-export-jobs");
+const dbExportMessageEl = document.getElementById("db-export-message");
+const exportSourceEl = document.getElementById("export-source");
+const exportFormatEl = document.getElementById("export-format");
+const exportRunStatusEl = document.getElementById("export-run-status");
+const exportHasPhoneEl = document.getElementById("export-has-phone");
+const exportDateFromEl = document.getElementById("export-date-from");
+const exportDateToEl = document.getElementById("export-date-to");
+const exportSearchEl = document.getElementById("export-search");
+const exportMaxRowsEl = document.getElementById("export-max-rows");
+const exportFileNameEl = document.getElementById("export-file-name");
+let jobsSearchQuery = "";
 
 async function api(url, options = {}) {
   const response = await fetch(url, {
@@ -81,12 +117,55 @@ function renderTabs() {
   });
 }
 
+function setFormMessage(text, type = "info") {
+  formMessageEl.textContent = text;
+  formMessageEl.classList.remove("success", "error");
+  if (type === "success") formMessageEl.classList.add("success");
+  if (type === "error") formMessageEl.classList.add("error");
+}
+
+function setExportMessage(text, type = "info") {
+  if (!dbExportMessageEl) return;
+  dbExportMessageEl.textContent = text;
+  dbExportMessageEl.classList.remove("success", "error");
+  if (type === "success") dbExportMessageEl.classList.add("success");
+  if (type === "error") dbExportMessageEl.classList.add("error");
+}
+
 function renderForm() {
   const parser = state.parsers[state.selectedParser];
   if (!parser) return;
   formFieldsEl.innerHTML = "";
 
   parser.fields.forEach((field) => {
+    if (field.type === "olx_category_selector") {
+      const wrapper = document.createElement("div");
+      wrapper.className = "field full";
+      wrapper.innerHTML = `
+        <label>${field.label}</label>
+        <div id="olx-category-picker" class="rubric-picker">
+          <div class="empty-state">Загружаю категории OLX...</div>
+        </div>
+      `;
+      formFieldsEl.appendChild(wrapper);
+      renderOlxCategoryPicker();
+      return;
+    }
+
+    if (field.type === "2gis_rubric_selector") {
+      const wrapper = document.createElement("div");
+      wrapper.className = "field full";
+      wrapper.innerHTML = `
+        <label>${field.label}</label>
+        <div id="2gis-rubric-picker" class="rubric-picker">
+          <div class="empty-state">Загружаю рубрики 2GIS...</div>
+        </div>
+      `;
+      formFieldsEl.appendChild(wrapper);
+      render2gisRubricPicker();
+      return;
+    }
+
     const wrapper = document.createElement("div");
     const fullWidth = field.type === "url" || field.name.includes("password");
     wrapper.className = `field ${fullWidth ? "full" : ""}`;
@@ -131,6 +210,9 @@ function renderForm() {
     input.name = field.name;
     input.id = field.name;
     if (field.required) input.required = true;
+    if (state.selectedParser === "olx" && field.name === "category_url") {
+      input.readOnly = !state.olxCategories.manualUrl;
+    }
     wrapper.append(label, input);
     formFieldsEl.appendChild(wrapper);
   });
@@ -147,14 +229,376 @@ function collectFormPayload() {
   return payload;
 }
 
+async function load2gisRubrics() {
+  if (state.rubrics2gis.loaded || state.rubrics2gis.loading) return;
+  state.rubrics2gis.loading = true;
+  state.rubrics2gis.error = "";
+  try {
+    const data = await api("/api/2gis/rubrics");
+    state.rubrics2gis.loaded = true;
+    state.rubrics2gis.level1 = Array.isArray(data.level1) ? data.level1 : [];
+  } catch (error) {
+    state.rubrics2gis.error = error.message;
+  } finally {
+    state.rubrics2gis.loading = false;
+  }
+}
+
+function parse2gisSearchUrl(rawUrl) {
+  const text = String(rawUrl || "").trim();
+  const fallback = { domain: "kz", city: "astana", rubric: "" };
+  const match = text.match(/^https?:\/\/2gis\.([a-z.]+)\/([^/]+)\/search\/(.+)$/i);
+  if (!match) return fallback;
+  const safeDecode = (value) => {
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  };
+  const domain = match[1] || fallback.domain;
+  const city = safeDecode(match[2] || fallback.city);
+  const rubric = safeDecode((match[3] || "").replace(/\+/g, "%20"));
+  return {
+    domain,
+    city,
+    rubric,
+  };
+}
+
+function build2gisSearchUrl(domain, city, rubric) {
+  const safeDomain = String(domain || "kz").trim().toLowerCase() || "kz";
+  const safeCity = String(city || "astana").trim() || "astana";
+  const safeRubric = String(rubric || "").trim();
+  if (!safeRubric) return "";
+  return `https://2gis.${safeDomain}/${encodeURIComponent(safeCity)}/search/${encodeURIComponent(safeRubric)}`;
+}
+
+function fillSelectOptions(selectEl, values, selectedValue = "") {
+  selectEl.innerHTML = "";
+  values.forEach((value) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    if (value === selectedValue) option.selected = true;
+    selectEl.appendChild(option);
+  });
+}
+
+function fillSelectOptionsWithEmpty(selectEl, values, selectedValue = "", emptyLabel = "Не выбрано") {
+  selectEl.innerHTML = "";
+  const emptyOption = document.createElement("option");
+  emptyOption.value = "";
+  emptyOption.textContent = emptyLabel;
+  if (!selectedValue) emptyOption.selected = true;
+  selectEl.appendChild(emptyOption);
+  values.forEach((value) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    if (value === selectedValue) option.selected = true;
+    selectEl.appendChild(option);
+  });
+}
+
+function fillSelectOptionsObjects(selectEl, items, selectedValue = "") {
+  selectEl.innerHTML = "";
+  items.forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.value;
+    option.textContent = item.label;
+    if (item.value === selectedValue) option.selected = true;
+    selectEl.appendChild(option);
+  });
+}
+
+function fillSelectOptionsObjectsWithEmpty(selectEl, items, selectedValue = "", emptyLabel = "Не выбрано") {
+  selectEl.innerHTML = "";
+  const emptyOption = document.createElement("option");
+  emptyOption.value = "";
+  emptyOption.textContent = emptyLabel;
+  if (!selectedValue) emptyOption.selected = true;
+  selectEl.appendChild(emptyOption);
+  items.forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.value;
+    option.textContent = item.label;
+    if (item.value === selectedValue) option.selected = true;
+    selectEl.appendChild(option);
+  });
+}
+
+async function loadOlxCategories() {
+  if (state.olxCategories.loaded || state.olxCategories.loading) return;
+  state.olxCategories.loading = true;
+  state.olxCategories.error = "";
+  try {
+    const data = await api("/api/olx/categories");
+    state.olxCategories.loaded = true;
+    state.olxCategories.level1 = Array.isArray(data.level1) ? data.level1 : [];
+  } catch (error) {
+    state.olxCategories.error = error.message;
+  } finally {
+    state.olxCategories.loading = false;
+  }
+}
+
+function parseOlxUrlPath(rawUrl) {
+  const text = String(rawUrl || "").trim();
+  const fallback = { l1: "", l2: "", l3: "" };
+  const match = text.match(/^https?:\/\/(?:www\.)?olx\.kz\/([^?#]+)$/i);
+  if (!match) return fallback;
+  const path = match[1].replace(/\/+$/, "");
+  const parts = path.split("/").filter(Boolean);
+  return {
+    l1: parts[0] || "",
+    l2: parts[1] || "",
+    l3: parts[2] || "",
+  };
+}
+
+function buildOlxCategoryUrl(l1, l2 = "", l3 = "") {
+  const parts = [l1, l2, l3].filter(Boolean);
+  if (!parts.length) return "";
+  return `https://www.olx.kz/${parts.join("/")}/`;
+}
+
+function renderOlxCategoryPicker() {
+  const picker = document.getElementById("olx-category-picker");
+  if (!picker || state.selectedParser !== "olx") return;
+
+  if (!state.olxCategories.loaded && !state.olxCategories.loading) {
+    loadOlxCategories().then(() => renderOlxCategoryPicker());
+  }
+
+  if (state.olxCategories.loading) {
+    picker.innerHTML = `<div class="empty-state">Загружаю категории OLX...</div>`;
+    return;
+  }
+  if (state.olxCategories.error) {
+    picker.innerHTML = `<div class="empty-state">Ошибка загрузки категорий: ${escapeHtml(state.olxCategories.error)}</div>`;
+    return;
+  }
+  if (!state.olxCategories.level1.length) {
+    picker.innerHTML = `<div class="empty-state">Категории не найдены.</div>`;
+    return;
+  }
+
+  picker.innerHTML = `
+    <div class="grid grid-2">
+      <div>
+        <label for="olx-level1">Категория (L1)</label>
+        <select id="olx-level1"></select>
+      </div>
+      <div>
+        <label for="olx-level2">Подкатегория (L2)</label>
+        <select id="olx-level2"></select>
+      </div>
+      <div class="full">
+        <label for="olx-level3">Раздел (L3)</label>
+        <select id="olx-level3"></select>
+      </div>
+      <div class="full manual-input-row">
+        <button type="button" class="ghost-button" id="olx-manual-btn">${state.olxCategories.manualUrl ? "Вернуть авто-режим" : "Редактировать вручную"}</button>
+      </div>
+    </div>
+  `;
+
+  const level1El = document.getElementById("olx-level1");
+  const level2El = document.getElementById("olx-level2");
+  const level3El = document.getElementById("olx-level3");
+  const manualBtn = document.getElementById("olx-manual-btn");
+  const urlInput = formEl.elements.category_url;
+  if (!level1El || !level2El || !level3El || !manualBtn || !urlInput) return;
+
+  const level1Items = state.olxCategories.level1;
+  const initial = parseOlxUrlPath(urlInput.value);
+  fillSelectOptionsObjects(
+    level1El,
+    level1Items.map((item) => ({ value: item.slug, label: item.name || item.slug })),
+    initial.l1 || level1Items[0]?.slug || ""
+  );
+
+  const syncLevel2 = (preferredL2 = "", preferredL3 = "") => {
+    const selectedL1 = level1Items.find((item) => item.slug === level1El.value) || level1Items[0];
+    const level2Items = selectedL1?.level2 || [];
+    fillSelectOptionsObjectsWithEmpty(
+      level2El,
+      level2Items.map((item) => ({ value: item.slug, label: item.name || item.slug })),
+      preferredL2
+    );
+    const selectedL2 = level2Items.find((item) => item.slug === level2El.value);
+    const level3Items = selectedL2?.level3 || [];
+    fillSelectOptionsObjectsWithEmpty(
+      level3El,
+      level3Items.map((item) => ({ value: item.slug, label: item.name || item.slug })),
+      preferredL3
+    );
+  };
+
+  const applyOlxUrl = () => {
+    if (state.olxCategories.manualUrl) return;
+    const l1 = level1El.value || "";
+    const l2 = level2El.value || "";
+    const l3 = level3El.value || "";
+    const url = buildOlxCategoryUrl(l1, l2, l3);
+    if (url) {
+      urlInput.value = url;
+      setFormMessage(`Ссылка обновлена: ${url}`);
+    }
+  };
+
+  syncLevel2(initial.l2, initial.l3);
+  urlInput.readOnly = !state.olxCategories.manualUrl;
+
+  level1El.addEventListener("change", () => {
+    syncLevel2("", "");
+    applyOlxUrl();
+  });
+  level2El.addEventListener("change", () => {
+    syncLevel2(level2El.value, "");
+    applyOlxUrl();
+  });
+  level3El.addEventListener("change", applyOlxUrl);
+
+  manualBtn.addEventListener("click", () => {
+    state.olxCategories.manualUrl = !state.olxCategories.manualUrl;
+    urlInput.readOnly = !state.olxCategories.manualUrl;
+    manualBtn.textContent = state.olxCategories.manualUrl ? "Вернуть авто-режим" : "Редактировать вручную";
+    if (!state.olxCategories.manualUrl) {
+      applyOlxUrl();
+    }
+  });
+}
+
+function render2gisRubricPicker() {
+  const picker = document.getElementById("2gis-rubric-picker");
+  if (!picker || state.selectedParser !== "2gis") return;
+
+  if (!state.rubrics2gis.loaded && !state.rubrics2gis.loading) {
+    load2gisRubrics().then(() => render2gisRubricPicker());
+  }
+
+  if (state.rubrics2gis.loading) {
+    picker.innerHTML = `<div class="empty-state">Загружаю рубрики 2GIS...</div>`;
+    return;
+  }
+  if (state.rubrics2gis.error) {
+    picker.innerHTML = `<div class="empty-state">Ошибка загрузки рубрик: ${escapeHtml(state.rubrics2gis.error)}</div>`;
+    return;
+  }
+  if (!state.rubrics2gis.level1.length) {
+    picker.innerHTML = `<div class="empty-state">Рубрики не найдены.</div>`;
+    return;
+  }
+
+  const searchUrlInput = formEl.elements.search_url;
+  const parsed = parse2gisSearchUrl(searchUrlInput?.value);
+  picker.innerHTML = `
+    <div class="grid grid-2">
+      <div>
+        <label for="rubric-domain">Домен</label>
+        <select id="rubric-domain">
+          <option value="kz">kz</option>
+          <option value="ru">ru</option>
+          <option value="com">com</option>
+        </select>
+      </div>
+      <div>
+        <label for="rubric-city">Город (slug)</label>
+        <input id="rubric-city" type="text" value="${escapeHtml(parsed.city || "astana")}" placeholder="astana" />
+      </div>
+      <div>
+        <label for="rubric-level1">Категория</label>
+        <select id="rubric-level1"></select>
+      </div>
+      <div>
+        <label for="rubric-level2">Рубрика 2го уровня</label>
+        <select id="rubric-level2"></select>
+      </div>
+      <div class="full">
+        <label for="rubric-level3">Рубрика</label>
+        <select id="rubric-level3"></select>
+      </div>
+      <div class="full">
+        <button type="button" class="ghost-button" id="rubric-apply-btn">Подставить рубрику в ссылку</button>
+      </div>
+    </div>
+  `;
+
+  const domainEl = document.getElementById("rubric-domain");
+  const cityEl = document.getElementById("rubric-city");
+  const level1El = document.getElementById("rubric-level1");
+  const level2El = document.getElementById("rubric-level2");
+  const level3El = document.getElementById("rubric-level3");
+  const applyBtn = document.getElementById("rubric-apply-btn");
+
+  if (!domainEl || !cityEl || !level1El || !level2El || !level3El || !applyBtn) return;
+  domainEl.value = parsed.domain || "kz";
+
+  const level1Items = state.rubrics2gis.level1;
+  fillSelectOptions(level1El, level1Items.map((x) => x.name), level1Items[0]?.name || "");
+
+  const syncLevel2 = (preferredLevel2 = "", preferredRubric = "") => {
+    const selectedLevel1 = level1Items.find((x) => x.name === level1El.value) || level1Items[0];
+    const level2Items = selectedLevel1?.level2 || [];
+    fillSelectOptionsWithEmpty(level2El, level2Items.map((x) => x.name), preferredLevel2);
+    const selectedLevel2 = level2Items.find((x) => x.name === level2El.value);
+    const rubrics = selectedLevel2?.rubrics || [];
+    fillSelectOptionsWithEmpty(level3El, rubrics, preferredRubric);
+  };
+
+  const applyToSearchUrl = () => {
+    if (!searchUrlInput) return;
+    const rubric = level3El.value || level2El.value || level1El.value || "";
+    const url = build2gisSearchUrl(domainEl.value, cityEl.value, rubric);
+    if (url) {
+      searchUrlInput.value = url;
+      setFormMessage(`Ссылка обновлена: ${url}`);
+    }
+  };
+
+  let initialLevel1 = level1Items[0]?.name || "";
+  let initialLevel2 = "";
+  let initialLevel3 = "";
+  for (const item of level1Items) {
+    const foundLevel2 = (item.level2 || []).find((x) => (x.rubrics || []).includes(parsed.rubric));
+    if (foundLevel2) {
+      initialLevel1 = item.name;
+      initialLevel2 = foundLevel2.name;
+      initialLevel3 = parsed.rubric || "";
+      break;
+    }
+  }
+  level1El.value = initialLevel1;
+  syncLevel2(initialLevel2, initialLevel3);
+
+  level1El.addEventListener("change", () => {
+    syncLevel2("", "");
+    applyToSearchUrl();
+  });
+  level2El.addEventListener("change", () => {
+    syncLevel2(level2El.value, "");
+    applyToSearchUrl();
+  });
+  applyBtn.addEventListener("click", applyToSearchUrl);
+  level3El.addEventListener("change", applyToSearchUrl);
+}
+
 function renderJobs() {
-  if (!state.jobs.length) {
+  const query = jobsSearchQuery.trim().toLowerCase();
+  const jobsToRender = !query ? state.jobs : state.jobs.filter((job) => {
+    const haystack = `${job.job_id} ${job.parser_key} ${job.status} ${job.output_path || ""}`.toLowerCase();
+    return haystack.includes(query);
+  });
+
+  if (!jobsToRender.length) {
     jobsListEl.innerHTML = `<div class="empty-state">Здесь появятся ваши запуски.</div>`;
     return;
   }
 
   jobsListEl.innerHTML = "";
-  state.jobs.forEach((job) => {
+  jobsToRender.forEach((job) => {
     const card = document.createElement("div");
     card.className = `job-card ${state.selectedJobId === job.job_id ? "active" : ""}`;
     card.innerHTML = `
@@ -174,6 +618,19 @@ function renderJobs() {
     });
     jobsListEl.appendChild(card);
   });
+}
+
+function updateHeaderStats() {
+  if (statTotalJobsEl) {
+    statTotalJobsEl.textContent = String(state.jobs.length);
+  }
+  if (statRunningJobsEl) {
+    const active = state.jobs.filter((job) => ["running", "queued", "paused"].includes(job.status)).length;
+    statRunningJobsEl.textContent = String(active);
+  }
+  if (statDbTotalEl) {
+    statDbTotalEl.textContent = String(state.db.total || 0);
+  }
 }
 
 function renderJobDetails(job) {
@@ -291,11 +748,11 @@ async function runJobAction(jobId, action, successText) {
     if (data.job?.job_id) {
       state.selectedJobId = data.job.job_id;
     }
-    formMessageEl.textContent = successText;
+    setFormMessage(successText, "success");
     await refreshJobs();
     await loadJobDetails();
   } catch (error) {
-    formMessageEl.textContent = error.message;
+    setFormMessage(error.message, "error");
   }
 }
 
@@ -368,6 +825,116 @@ function renderDbTable() {
   dbSummaryEl.textContent = `Всего: ${state.db.total} • Страница ${state.db.page} / ${state.db.pages}`;
   dbPrevPageEl.disabled = state.db.page <= 1;
   dbNextPageEl.disabled = state.db.page >= state.db.pages;
+  updateHeaderStats();
+}
+
+function renderExportFieldSelector() {
+  if (!dbExportFieldsEl) return;
+  if (!state.exports.fields.length) {
+    dbExportFieldsEl.innerHTML = `<div class="empty-state">Поля выгрузки загружаются...</div>`;
+    return;
+  }
+  dbExportFieldsEl.innerHTML = state.exports.fields.map((field) => (
+    `<label class="db-export-field">
+      <input type="checkbox" name="export-field" value="${escapeHtml(field.key)}" checked />
+      <span>${escapeHtml(field.label)}</span>
+    </label>`
+  )).join("");
+}
+
+function collectExportPayload() {
+  const checked = Array.from(document.querySelectorAll('input[name="export-field"]:checked'))
+    .map((item) => item.value);
+  return {
+    format: exportFormatEl?.value || "xlsx",
+    file_name: exportFileNameEl?.value.trim() || "",
+    fields: checked,
+    filters: {
+      source: exportSourceEl?.value || "",
+      run_status: exportRunStatusEl?.value || "",
+      has_phone: exportHasPhoneEl?.value || "",
+      date_from: exportDateFromEl?.value || "",
+      date_to: exportDateToEl?.value || "",
+      search: exportSearchEl?.value.trim() || "",
+      max_rows: exportMaxRowsEl?.value || "50000",
+    },
+  };
+}
+
+function renderExportJobs() {
+  if (!dbExportJobsEl) return;
+  if (!state.exports.jobs.length) {
+    dbExportJobsEl.innerHTML = `<div class="empty-state">Здесь появятся задачи выгрузки.</div>`;
+    return;
+  }
+  dbExportJobsEl.innerHTML = state.exports.jobs.map((job) => {
+    const progress = Number(job.progress || 0);
+    const isDone = job.status === "completed";
+    const isRunning = ["queued", "running"].includes(job.status);
+    const downloadButton = isDone && job.output_path
+      ? `<a class="ghost-button" href="/api/db/exports/${job.job_id}/download" target="_blank" rel="noopener noreferrer">Скачать</a>`
+      : "";
+    const stopButton = isRunning
+      ? `<button class="danger-button" type="button" data-export-stop="${job.job_id}">Остановить</button>`
+      : "";
+    return `
+      <div class="db-export-job">
+        <div class="db-export-job-top">
+          <strong>${escapeHtml(job.file_name || job.job_id)}</strong>
+          <span class="${statusClass(job.status)}">${jobStatusLabel(job.status)}</span>
+        </div>
+        <div class="db-export-job-meta">
+          <span>${formatDateTime(job.created_at)}</span>
+          <span>Формат: ${escapeHtml(job.format || "")}</span>
+          <span>Строк: ${job.exported_rows || 0} / ${job.total_rows || 0}</span>
+        </div>
+        <div class="db-export-progress"><span style="width:${progress}%"></span></div>
+        ${job.error ? `<div class="form-message error" style="margin-top:8px;">${escapeHtml(job.error)}</div>` : ""}
+        <div class="db-export-job-actions">
+          ${downloadButton}
+          ${stopButton}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  dbExportJobsEl.querySelectorAll("[data-export-stop]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const jobId = btn.getAttribute("data-export-stop");
+      if (!jobId) return;
+      try {
+        await api(`/api/db/exports/${jobId}/stop`, { method: "POST", body: "{}" });
+        setExportMessage(`Выгрузка ${jobId} остановлена.`, "success");
+        await loadExportJobs();
+      } catch (error) {
+        setExportMessage(error.message, "error");
+      }
+    });
+  });
+}
+
+async function loadExportConfig() {
+  try {
+    const source = exportSourceEl?.value || "";
+    const query = new URLSearchParams();
+    if (source) query.set("source", source);
+    const data = await api(`/api/db/export/config?${query.toString()}`);
+    state.exports.fields = Array.isArray(data.fields) ? data.fields : [];
+    renderExportFieldSelector();
+    setExportMessage(`Поля загружены: ${state.exports.fields.length}`);
+  } catch (error) {
+    setExportMessage(`Ошибка конфигурации выгрузки: ${error.message}`, "error");
+  }
+}
+
+async function loadExportJobs() {
+  try {
+    const data = await api("/api/db/exports");
+    state.exports.jobs = Array.isArray(data.jobs) ? data.jobs : [];
+    renderExportJobs();
+  } catch (error) {
+    setExportMessage(`Ошибка загрузки задач выгрузки: ${error.message}`, "error");
+  }
 }
 
 function buildDbQuery(filters) {
@@ -401,6 +968,7 @@ async function loadDbRecords() {
   } catch (error) {
     dbResultsBodyEl.innerHTML = `<tr><td colspan="11" class="db-empty">Ошибка загрузки БД: ${escapeHtml(error.message)}</td></tr>`;
     dbSummaryEl.textContent = "Ошибка загрузки.";
+    updateHeaderStats();
   }
 }
 
@@ -419,6 +987,7 @@ async function refreshJobs() {
     state.selectedJobId = state.jobs[0].job_id;
   }
   renderJobs();
+  updateHeaderStats();
 }
 
 async function loadJobDetails() {
@@ -436,8 +1005,32 @@ async function loadJobDetails() {
 
 formEl.addEventListener("submit", async (event) => {
   event.preventDefault();
-  formMessageEl.textContent = "Запускаю задачу...";
+  setFormMessage("Запускаю задачу...");
   try {
+    if (state.selectedParser === "olx" && !state.olxCategories.manualUrl) {
+      const level1El = document.getElementById("olx-level1");
+      const level2El = document.getElementById("olx-level2");
+      const level3El = document.getElementById("olx-level3");
+      const categoryUrlInput = formEl.elements.category_url;
+      if (categoryUrlInput && level1El) {
+        const url = buildOlxCategoryUrl(level1El.value, level2El?.value || "", level3El?.value || "");
+        if (url) categoryUrlInput.value = url;
+      }
+    }
+
+    if (state.selectedParser === "2gis") {
+      const domainEl = document.getElementById("rubric-domain");
+      const cityEl = document.getElementById("rubric-city");
+      const level1El = document.getElementById("rubric-level1");
+      const level2El = document.getElementById("rubric-level2");
+      const level3El = document.getElementById("rubric-level3");
+      const searchUrlInput = formEl.elements.search_url;
+      if (domainEl && cityEl && searchUrlInput) {
+        const rubric = (level3El?.value || level2El?.value || level1El?.value || "").trim();
+        const url = build2gisSearchUrl(domainEl.value, cityEl.value, rubric);
+        if (url) searchUrlInput.value = url;
+      }
+    }
     const payload = collectFormPayload();
     const data = await api("/api/run", {
       method: "POST",
@@ -446,13 +1039,13 @@ formEl.addEventListener("submit", async (event) => {
         payload,
       }),
     });
-    formMessageEl.textContent = `Задача ${data.job.job_id} запущена.`;
+    setFormMessage(`Задача ${data.job.job_id} запущена.`, "success");
     state.selectedJobId = data.job.job_id;
     await refreshJobs();
     await loadJobDetails();
     await loadDbRecords();
   } catch (error) {
-    formMessageEl.textContent = error.message;
+    setFormMessage(error.message, "error");
   }
 });
 
@@ -479,12 +1072,50 @@ dbNextPageEl?.addEventListener("click", async () => {
   await loadDbRecords();
 });
 
+dbExportFieldsAllEl?.addEventListener("click", () => {
+  const all = dbExportFieldsEl?.querySelectorAll('input[name="export-field"]') || [];
+  all.forEach((item) => {
+    item.checked = true;
+  });
+});
+
+exportSourceEl?.addEventListener("change", async () => {
+  await loadExportConfig();
+});
+
+dbExportFormEl?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setExportMessage("Запускаю выгрузку...");
+  try {
+    const payload = collectExportPayload();
+    if (!payload.fields.length) {
+      setExportMessage("Выбери хотя бы одно поле для выгрузки.", "error");
+      return;
+    }
+    const data = await api("/api/db/export", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    setExportMessage(`Выгрузка ${data.job.job_id} запущена.`, "success");
+    await loadExportJobs();
+  } catch (error) {
+    setExportMessage(error.message, "error");
+  }
+});
+
+jobsSearchEl?.addEventListener("input", () => {
+  jobsSearchQuery = jobsSearchEl.value || "";
+  renderJobs();
+});
+
 async function boot() {
   syncDbFormWithState();
   await loadConfig();
+  await loadExportConfig();
   await refreshJobs();
   await loadJobDetails();
   await loadDbRecords();
+  await loadExportJobs();
 
   window.setInterval(async () => {
     await refreshJobs();
@@ -494,8 +1125,12 @@ async function boot() {
   window.setInterval(async () => {
     await loadDbRecords();
   }, 6000);
+
+  window.setInterval(async () => {
+    await loadExportJobs();
+  }, 2500);
 }
 
 boot().catch((error) => {
-  formMessageEl.textContent = error.message;
+  setFormMessage(error.message, "error");
 });
