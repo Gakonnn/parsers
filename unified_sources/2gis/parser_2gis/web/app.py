@@ -310,7 +310,6 @@ def web_app(urls: list[str] | None, output_path: str | None,
             probe_seconds = max(4, int(state.auto_probe_seconds))
             first_deadline = max(1.0, float(state.auto_first_parse_deadline))
             min_rps = max(0.1, float(state.auto_min_rps))
-            output_path_local = state.output_path
 
         for attempt in range(1, max_attempts + 1):
             with state.lock:
@@ -321,9 +320,12 @@ def web_app(urls: list[str] | None, output_path: str | None,
 
             runner = _start_runner()
             start_ts = time.time()
-            base_rows = _csv_data_rows(output_path_local)
             first_record_delay: float | None = None
             records_seen = 0
+            log_cursor = 0
+            with state.lock:
+                state.drain_logs()
+                log_cursor = len(state.logs)
 
             while time.time() - start_ts < probe_seconds:
                 with state.lock:
@@ -331,10 +333,14 @@ def web_app(urls: list[str] | None, output_path: str | None,
                         _stop_runner(runner)
                         state.runner = None
                         break
-                current_rows = max(0, _csv_data_rows(output_path_local) - base_rows)
-                records_seen = max(records_seen, current_rows)
-                if records_seen > 0 and first_record_delay is None:
-                    first_record_delay = time.time() - start_ts
+                    state.drain_logs()
+                    fresh_logs = state.logs[log_cursor:]
+                    log_cursor = len(state.logs)
+                for line in fresh_logs:
+                    if 'Парсинг [' in line:
+                        records_seen += 1
+                        if first_record_delay is None:
+                            first_record_delay = time.time() - start_ts
                 if not runner.is_alive():
                     break
                 time.sleep(1)
