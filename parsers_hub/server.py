@@ -243,7 +243,7 @@ class JobManager:
         auto_max_attempts = max(1, int(env.get("PARSERS_HUB_2GIS_AUTO_MAX_ATTEMPTS", "10")))
         auto_probe_seconds = max(4, int(env.get("PARSERS_HUB_2GIS_AUTO_PROBE_SECONDS", "10")))
         auto_first_deadline = max(1.0, float(env.get("PARSERS_HUB_2GIS_AUTO_FIRST_PARSE_DEADLINE", "5")))
-        auto_min_rps = max(0.1, float(env.get("PARSERS_HUB_2GIS_AUTO_MIN_RPS", "0.9")))
+        auto_min_rps = max(0.1, float(env.get("PARSERS_HUB_2GIS_AUTO_MIN_RPS", "0.8")))
 
         process: subprocess.Popen[str] | None = None
         attempt = 0
