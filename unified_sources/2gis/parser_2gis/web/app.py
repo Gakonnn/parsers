@@ -38,6 +38,9 @@ class _WebState:
         self.auto_first_parse_deadline = 5.0
         self.auto_min_rps = 1.0
         self.auto_current_attempt = 0
+        self.attempt_started_at = 0.0
+        self.attempt_parsed_events = 0
+        self.attempt_first_parse_delay: float | None = None
 
     def drain_logs(self) -> None:
         while True:
@@ -46,6 +49,10 @@ class _WebState:
             except queue.Empty:
                 break
             self.logs.append(message)
+            if 'Парсинг [' in message and self.attempt_started_at > 0:
+                self.attempt_parsed_events += 1
+                if self.attempt_first_parse_delay is None:
+                    self.attempt_first_parse_delay = max(0.0, time.time() - self.attempt_started_at)
 
 
 def _is_runner_alive(state: _WebState) -> bool:
@@ -320,12 +327,11 @@ def web_app(urls: list[str] | None, output_path: str | None,
 
             runner = _start_runner()
             start_ts = time.time()
-            first_record_delay: float | None = None
-            records_seen = 0
-            log_cursor = 0
             with state.lock:
+                state.attempt_started_at = start_ts
+                state.attempt_parsed_events = 0
+                state.attempt_first_parse_delay = None
                 state.drain_logs()
-                log_cursor = len(state.logs)
 
             while time.time() - start_ts < probe_seconds:
                 with state.lock:
@@ -334,18 +340,18 @@ def web_app(urls: list[str] | None, output_path: str | None,
                         state.runner = None
                         break
                     state.drain_logs()
-                    fresh_logs = state.logs[log_cursor:]
-                    log_cursor = len(state.logs)
-                for line in fresh_logs:
-                    if 'Парсинг [' in line:
-                        records_seen += 1
-                        if first_record_delay is None:
-                            first_record_delay = time.time() - start_ts
+                    records_seen = state.attempt_parsed_events
+                    first_record_delay = state.attempt_first_parse_delay
                 if not runner.is_alive():
                     break
                 time.sleep(1)
 
             elapsed = max(0.001, time.time() - start_ts)
+            with state.lock:
+                state.drain_logs()
+                records_seen = state.attempt_parsed_events
+                first_record_delay = state.attempt_first_parse_delay
+                state.attempt_started_at = 0.0
             rps = records_seen / elapsed
             stable = (
                 first_record_delay is not None
