@@ -35,7 +35,9 @@ class MainParser:
         self._url = url
 
         # "Catalog Item Document" response pattern.
-        self._item_response_pattern = r'https://catalog\.api\.2gis.[^/]+/.*/items/byid'
+        self._item_response_pattern = (
+            r'https://catalog\.api\.2gis\.[^/]+/.*/items(?:/byid)?(?:\?.*)?$'
+        )
 
         # Open browser, start remote
         response_patterns = [self._item_response_pattern]
