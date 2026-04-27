@@ -33,6 +33,107 @@ except Exception:  # noqa: BLE001
     psycopg2 = None
 
 
+def build_job_progress(
+    *,
+    status: str,
+    parser_key: str,
+    command: list[str] | None = None,
+    payload: dict[str, Any] | None = None,
+    log_text: str = "",
+) -> dict[str, Any]:
+    current, total = extract_progress_from_log(log_text)
+    configured_total = extract_total_from_command(command or []) or extract_total_from_payload(payload or {})
+    if total <= 0:
+        total = configured_total
+    if current <= 0 and status == "completed" and total > 0:
+        current = total
+
+    if status == "completed":
+        percent = 100
+    elif total > 0:
+        percent = max(0, min(99, int((current / total) * 100)))
+    elif status == "running":
+        percent = 12
+    else:
+        percent = 0
+
+    if status in {"failed", "stopped"} and total > 0:
+        percent = max(0, min(100, int((current / total) * 100)))
+
+    label = "Ожидание старта"
+    if current and total:
+        label = f"{current}/{total}"
+    elif current:
+        label = f"{current} записей"
+    elif status == "completed":
+        label = "Готово"
+    elif status == "running":
+        label = "Парсинг идет"
+    elif status == "paused":
+        label = "Пауза"
+    elif status in {"failed", "stopped"}:
+        label = "Остановлено"
+
+    return {
+        "current": current,
+        "total": total,
+        "percent": percent,
+        "label": label,
+        "indeterminate": status == "running" and total <= 0,
+        "source": parser_key,
+    }
+
+
+def extract_progress_from_log(log_text: str) -> tuple[int, int]:
+    current = 0
+    total = 0
+    for line in (log_text or "").splitlines():
+        ratio_match = re.search(r"\[(\d+)\s*/\s*(\d+)\]", line)
+        if ratio_match:
+            current = max(current, int(ratio_match.group(1)))
+            total = max(total, int(ratio_match.group(2)))
+            continue
+
+        gis_match = re.search(r"Парсинг\s+\[(\d+)\]", line)
+        if gis_match:
+            current = max(current, int(gis_match.group(1)))
+            continue
+
+        report_match = re.search(r"\[report\].*?\bprocessed=(\d+)", line)
+        if report_match:
+            current = max(current, int(report_match.group(1)))
+            continue
+
+        saved_match = re.search(r"Сохранено\s+(\d+)\s+объявлен", line, re.IGNORECASE)
+        if saved_match:
+            current = max(current, int(saved_match.group(1)))
+
+    return current, total
+
+
+def extract_total_from_command(command: list[str]) -> int:
+    total_flags = {"--limit", "--listing-limit", "--max-records", "--parser.max-records"}
+    for index, part in enumerate(command):
+        if part in total_flags and index + 1 < len(command):
+            try:
+                return max(0, int(str(command[index + 1])))
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
+def extract_total_from_payload(payload: dict[str, Any]) -> int:
+    for key in ("limit", "listing_limit", "max_records"):
+        value = payload.get(key)
+        if value in (None, ""):
+            continue
+        try:
+            return max(0, int(str(value)))
+        except (TypeError, ValueError):
+            continue
+    return 0
+
+
 ROOT_DIR = Path(__file__).resolve().parent
 STATIC_DIR = ROOT_DIR / "static"
 RUNS_DIR = ROOT_DIR / "runs"
@@ -98,6 +199,7 @@ class Job:
     last_snapshot_at: str | None = None
 
     def snapshot(self) -> dict[str, Any]:
+        log_text = "".join(self.log_lines[-400:])
         return {
             "job_id": self.job_id,
             "parser_key": self.parser_key,
@@ -112,7 +214,13 @@ class Job:
             "stop_requested": self.stop_requested,
             "snapshots": self.snapshots[-30:],
             "last_snapshot_at": self.last_snapshot_at,
-            "log": "".join(self.log_lines[-400:]),
+            "log": log_text,
+            "progress": build_job_progress(
+                status=self.status,
+                parser_key=self.parser_key,
+                command=self.command,
+                log_text=log_text,
+            ),
         }
 
 
@@ -456,6 +564,7 @@ class AgentJob:
     last_snapshot_at: str | None = None
 
     def snapshot(self) -> dict[str, Any]:
+        log_text = "".join(self.log_lines[-400:])
         return {
             "job_id": self.job_id,
             "parser_key": self.parser_key,
@@ -470,9 +579,16 @@ class AgentJob:
             "stop_requested": self.stop_requested,
             "snapshots": self.snapshots[-30:],
             "last_snapshot_at": self.last_snapshot_at,
-            "log": "".join(self.log_lines[-400:]),
+            "log": log_text,
             "agent_id": self.agent_id,
             "error": self.error,
+            "progress": build_job_progress(
+                status=self.status,
+                parser_key=self.parser_key,
+                command=self.command,
+                payload=self.payload,
+                log_text=log_text,
+            ),
         }
 
 

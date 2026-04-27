@@ -102,6 +102,40 @@ function jobStatusLabel(status) {
   return map[status] || status;
 }
 
+function jobProgress(job) {
+  const progress = job?.progress && typeof job.progress === "object" ? job.progress : {};
+  const percent = Math.max(0, Math.min(100, Number(progress.percent || 0)));
+  return {
+    current: Number(progress.current || 0),
+    total: Number(progress.total || 0),
+    percent,
+    label: progress.label || (job?.status === "completed" ? "Готово" : "Ожидание старта"),
+    indeterminate: Boolean(progress.indeterminate),
+  };
+}
+
+function progressHtml(job, variant = "compact") {
+  const progress = jobProgress(job);
+  const barClass = [
+    "job-progress",
+    `job-progress-${variant}`,
+    progress.indeterminate ? "indeterminate" : "",
+    job?.status ? `job-progress-${job.status}` : "",
+  ].filter(Boolean).join(" ");
+  const width = progress.indeterminate ? 42 : progress.percent;
+  return `
+    <div class="${barClass}" aria-label="Прогресс ${escapeHtml(progress.label)}">
+      <div class="job-progress-track">
+        <span class="job-progress-fill" style="width:${width}%"></span>
+      </div>
+      <div class="job-progress-meta">
+        <span>${escapeHtml(progress.label)}</span>
+        <strong>${progress.indeterminate ? "live" : `${progress.percent}%`}</strong>
+      </div>
+    </div>
+  `;
+}
+
 function renderTabs() {
   if (!tabsEl) return;
   tabsEl.innerHTML = "";
@@ -617,6 +651,7 @@ function renderJobs() {
         <span>${formatDateTime(job.created_at)}</span>
         <span>${basename(job.output_path)}</span>
       </div>
+      ${progressHtml(job, "compact")}
     `;
     card.addEventListener("click", () => {
       state.selectedJobId = job.job_id;
@@ -657,6 +692,7 @@ function renderJobDetails(job) {
   const canStop = job.status === "running" || job.status === "paused" || job.status === "queued";
   const canRestart = ["completed", "failed", "stopped"].includes(job.status);
   const snapshots = Array.isArray(job.snapshots) ? job.snapshots : [];
+  const progress = jobProgress(job);
 
   jobDetailsEl.innerHTML = `
     <div class="detail-card">
@@ -664,6 +700,14 @@ function renderJobDetails(job) {
         <div class="detail-title">${job.parser_key.toUpperCase()} • ${job.job_id}</div>
         <span class="${statusClass(job.status)}">${jobStatusLabel(job.status)}</span>
       </div>
+      <div class="progress-hero">
+        <div>
+          <span>Прогресс парсинга</span>
+          <strong>${escapeHtml(progress.label)}</strong>
+        </div>
+        <b>${progress.indeterminate ? "live" : `${progress.percent}%`}</b>
+      </div>
+      ${progressHtml(job, "detail")}
       <div class="detail-meta">
         <div class="detail-item">
           <span>Создано</span>
