@@ -10,9 +10,9 @@ from pydantic import ValidationError
 
 from ...common import report_from_validation_error
 from ...logger import logger
+from ..phone_utils import normalize_phone_number
 from ..models import CatalogItem
 from .file_writer import FileWriter
-from unified_parsers.phone_utils import normalize_phone_number
 
 
 class CSVWriter(FileWriter):

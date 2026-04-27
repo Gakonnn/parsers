@@ -5,8 +5,8 @@ import os
 from typing import Any
 
 from ...logger import logger
+from ..phone_utils import normalize_2gis_contact_phones
 from .file_writer import FileWriter
-from unified_parsers.phone_utils import normalize_2gis_contact_phones
 
 
 class JSONWriter(FileWriter):
