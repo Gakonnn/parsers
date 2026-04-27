@@ -351,6 +351,22 @@ body {
   justify-content: flex-start;
 }
 
+.olx-location-card {
+  border: 1px solid rgba(15, 118, 110, 0.13);
+  border-radius: 12px;
+  padding: 12px;
+  background:
+    radial-gradient(260px 90px at 10% 0%, rgba(20, 184, 166, 0.13), transparent 70%),
+    #ffffff;
+}
+
+.field-hint {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .rubric-picker label {
   display: block;
   margin: 0 0 6px;

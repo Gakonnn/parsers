@@ -74,6 +74,48 @@ const exportMaxRowsEl = document.getElementById("export-max-rows");
 const exportFileNameEl = document.getElementById("export-file-name");
 let jobsSearchQuery = "";
 
+const OLX_LOCATIONS = [
+  {
+    region: "Популярные города",
+    cities: [
+      { name: "Алматы", slug: "alma-ata" },
+      { name: "Астана", slug: "astana" },
+      { name: "Шымкент", slug: "shymkent" },
+      { name: "Караганда", slug: "karaganda" },
+      { name: "Актобе", slug: "aktobe" },
+      { name: "Павлодар", slug: "pavlodar" },
+      { name: "Тараз", slug: "taraz" },
+      { name: "Усть-Каменогорск", slug: "ust-kamenogorsk" },
+      { name: "Атырау", slug: "atyrau" },
+      { name: "Костанай", slug: "kostanay" },
+      { name: "Актау", slug: "aktau" },
+      { name: "Семей", slug: "semey" },
+      { name: "Кызылорда", slug: "kyzylorda" },
+      { name: "Уральск", slug: "uralsk" },
+      { name: "Петропавловск", slug: "petropavlovsk" },
+      { name: "Кокшетау", slug: "kokshetau" },
+      { name: "Туркестан", slug: "turkestan" },
+      { name: "Талдыкорган", slug: "taldykorgan" },
+      { name: "Каскелен", slug: "kaskelen" },
+      { name: "Талгар", slug: "talgar" },
+    ],
+  },
+  {
+    region: "Алматинская область",
+    cities: [
+      { name: "Конаев (Капчагай)", slug: "kapshagay_1485" },
+      { name: "Есик", slug: "esik" },
+      { name: "Жаркент", slug: "zharkent" },
+      { name: "Текели", slug: "tekeli" },
+      { name: "Шелек", slug: "shelek" },
+      { name: "Боралдай", slug: "boralday" },
+      { name: "Отеген батыра", slug: "otegen-batyr" },
+    ],
+  },
+];
+
+const OLX_LOCATION_SLUGS = new Set(OLX_LOCATIONS.flatMap((group) => group.cities.map((city) => city.slug)));
+
 async function api(url, options = {}) {
   const response = await fetch(url, {
     headers: { "Content-Type": "application/json" },
@@ -368,6 +410,28 @@ function fillSelectOptionsObjectsWithEmpty(selectEl, items, selectedValue = "", 
   });
 }
 
+function fillOlxLocationOptions(selectEl, selectedValue = "") {
+  selectEl.innerHTML = "";
+  const emptyOption = document.createElement("option");
+  emptyOption.value = "";
+  emptyOption.textContent = "Все города Казахстана";
+  if (!selectedValue) emptyOption.selected = true;
+  selectEl.appendChild(emptyOption);
+
+  OLX_LOCATIONS.forEach((group) => {
+    const optgroup = document.createElement("optgroup");
+    optgroup.label = group.region;
+    group.cities.forEach((city) => {
+      const option = document.createElement("option");
+      option.value = city.slug;
+      option.textContent = city.name;
+      if (city.slug === selectedValue) option.selected = true;
+      optgroup.appendChild(option);
+    });
+    selectEl.appendChild(optgroup);
+  });
+}
+
 async function loadOlxCategories() {
   if (state.olxCategories.loaded || state.olxCategories.loading) return;
   state.olxCategories.loading = true;
@@ -385,20 +449,22 @@ async function loadOlxCategories() {
 
 function parseOlxUrlPath(rawUrl) {
   const text = String(rawUrl || "").trim();
-  const fallback = { l1: "", l2: "", l3: "" };
+  const fallback = { l1: "", l2: "", l3: "", location: "" };
   const match = text.match(/^https?:\/\/(?:www\.)?olx\.kz\/([^?#]+)$/i);
   if (!match) return fallback;
   const path = match[1].replace(/\/+$/, "");
   const parts = path.split("/").filter(Boolean);
+  const location = OLX_LOCATION_SLUGS.has(parts[parts.length - 1]) ? parts.pop() : "";
   return {
     l1: parts[0] || "",
     l2: parts[1] || "",
     l3: parts[2] || "",
+    location,
   };
 }
 
-function buildOlxCategoryUrl(l1, l2 = "", l3 = "") {
-  const parts = [l1, l2, l3].filter(Boolean);
+function buildOlxCategoryUrl(l1, l2 = "", l3 = "", location = "") {
+  const parts = [l1, l2, l3, location].filter(Boolean);
   if (!parts.length) return "";
   return `https://www.olx.kz/${parts.join("/")}/`;
 }
@@ -438,6 +504,11 @@ function renderOlxCategoryPicker() {
         <label for="olx-level3">Раздел (L3)</label>
         <select id="olx-level3"></select>
       </div>
+      <div class="full olx-location-card">
+        <label for="olx-location">Город объявлений</label>
+        <select id="olx-location"></select>
+        <p class="field-hint">Как в OLX locations-list: город добавляется в конец ссылки поиска.</p>
+      </div>
       <div class="full manual-input-row">
         <button type="button" class="ghost-button" id="olx-manual-btn">${state.olxCategories.manualUrl ? "Вернуть авто-режим" : "Редактировать вручную"}</button>
       </div>
@@ -447,12 +518,14 @@ function renderOlxCategoryPicker() {
   const level1El = document.getElementById("olx-level1");
   const level2El = document.getElementById("olx-level2");
   const level3El = document.getElementById("olx-level3");
+  const locationEl = document.getElementById("olx-location");
   const manualBtn = document.getElementById("olx-manual-btn");
   const urlInput = formEl.elements.category_url;
-  if (!level1El || !level2El || !level3El || !manualBtn || !urlInput) return;
+  if (!level1El || !level2El || !level3El || !locationEl || !manualBtn || !urlInput) return;
 
   const level1Items = state.olxCategories.level1;
   const initial = parseOlxUrlPath(urlInput.value);
+  fillOlxLocationOptions(locationEl, initial.location);
   fillSelectOptionsObjects(
     level1El,
     level1Items.map((item) => ({ value: item.slug, label: item.name || item.slug })),
@@ -481,7 +554,8 @@ function renderOlxCategoryPicker() {
     const l1 = level1El.value || "";
     const l2 = level2El.value || "";
     const l3 = level3El.value || "";
-    const url = buildOlxCategoryUrl(l1, l2, l3);
+    const location = locationEl.value || "";
+    const url = buildOlxCategoryUrl(l1, l2, l3, location);
     if (url) {
       urlInput.value = url;
       setFormMessage(`Ссылка обновлена: ${url}`);
@@ -500,6 +574,7 @@ function renderOlxCategoryPicker() {
     applyOlxUrl();
   });
   level3El.addEventListener("change", applyOlxUrl);
+  locationEl.addEventListener("change", applyOlxUrl);
 
   manualBtn.addEventListener("click", () => {
     state.olxCategories.manualUrl = !state.olxCategories.manualUrl;
