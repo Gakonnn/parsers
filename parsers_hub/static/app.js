@@ -9,6 +9,13 @@ const state = {
     error: "",
     level1: [],
   },
+  cities2gis: {
+    loaded: false,
+    loading: false,
+    error: "",
+    cities: [],
+    domains: [],
+  },
   olxCategories: {
     loaded: false,
     loading: false,
@@ -583,6 +590,22 @@ async function load2gisRubrics() {
   }
 }
 
+async function load2gisCities() {
+  if (state.cities2gis.loaded || state.cities2gis.loading) return;
+  state.cities2gis.loading = true;
+  state.cities2gis.error = "";
+  try {
+    const data = await api("/api/2gis/cities");
+    state.cities2gis.loaded = true;
+    state.cities2gis.cities = Array.isArray(data.cities) ? data.cities : [];
+    state.cities2gis.domains = Array.isArray(data.domains) ? data.domains : [];
+  } catch (error) {
+    state.cities2gis.error = error.message;
+  } finally {
+    state.cities2gis.loading = false;
+  }
+}
+
 function parse2gisSearchUrl(rawUrl) {
   const text = String(rawUrl || "").trim();
   const fallback = { domain: "kz", city: "astana", rubric: "" };
@@ -665,6 +688,25 @@ function fillSelectOptionsObjectsWithEmpty(selectEl, items, selectedValue = "", 
     if (item.value === selectedValue) option.selected = true;
     selectEl.appendChild(option);
   });
+}
+
+function fill2gisDomainOptions(selectEl, selectedValue = "kz") {
+  const preferred = ["kz", "ru", "kg", "uz", "az", "ae"];
+  const domains = [...new Set([...preferred, ...state.cities2gis.domains])].filter(Boolean);
+  fillSelectOptions(selectEl, domains, selectedValue || "kz");
+}
+
+function fill2gisCityOptions(selectEl, domain, selectedValue = "astana") {
+  const cities = state.cities2gis.cities.filter((city) => city.domain === domain);
+  const items = cities.map((city) => ({ value: city.code, label: `${city.name} (${city.code})` }));
+  fillSelectOptionsObjects(selectEl, items, selectedValue);
+  if (selectedValue && !cities.some((city) => city.code === selectedValue)) {
+    const option = document.createElement("option");
+    option.value = selectedValue;
+    option.textContent = `${selectedValue} (из текущей ссылки)`;
+    option.selected = true;
+    selectEl.appendChild(option);
+  }
 }
 
 function fillOlxLocationOptions(selectEl, selectedValue = "") {
@@ -984,17 +1026,28 @@ function render2gisRubricPicker() {
   if (!state.rubrics2gis.loaded && !state.rubrics2gis.loading) {
     load2gisRubrics().then(() => render2gisRubricPicker());
   }
+  if (!state.cities2gis.loaded && !state.cities2gis.loading) {
+    load2gisCities().then(() => render2gisRubricPicker());
+  }
 
-  if (state.rubrics2gis.loading) {
-    picker.innerHTML = `<div class="empty-state">Загружаю рубрики 2GIS...</div>`;
+  if (state.rubrics2gis.loading || state.cities2gis.loading) {
+    picker.innerHTML = `<div class="empty-state">Загружаю рубрики и города 2GIS...</div>`;
     return;
   }
   if (state.rubrics2gis.error) {
     picker.innerHTML = `<div class="empty-state">Ошибка загрузки рубрик: ${escapeHtml(state.rubrics2gis.error)}</div>`;
     return;
   }
+  if (state.cities2gis.error) {
+    picker.innerHTML = `<div class="empty-state">Ошибка загрузки городов: ${escapeHtml(state.cities2gis.error)}</div>`;
+    return;
+  }
   if (!state.rubrics2gis.level1.length) {
     picker.innerHTML = `<div class="empty-state">Рубрики не найдены.</div>`;
+    return;
+  }
+  if (!state.cities2gis.cities.length) {
+    picker.innerHTML = `<div class="empty-state">Города 2GIS не найдены.</div>`;
     return;
   }
 
@@ -1011,8 +1064,8 @@ function render2gisRubricPicker() {
         </select>
       </div>
       <div>
-        <label for="rubric-city">Город (slug)</label>
-        <input id="rubric-city" type="text" value="${escapeHtml(parsed.city || "astana")}" placeholder="astana" />
+        <label for="rubric-city">Город</label>
+        <select id="rubric-city"></select>
       </div>
       <div>
         <label for="rubric-level1">Категория</label>
@@ -1040,7 +1093,8 @@ function render2gisRubricPicker() {
   const applyBtn = document.getElementById("rubric-apply-btn");
 
   if (!domainEl || !cityEl || !level1El || !level2El || !level3El || !applyBtn) return;
-  domainEl.value = parsed.domain || "kz";
+  fill2gisDomainOptions(domainEl, parsed.domain || "kz");
+  fill2gisCityOptions(cityEl, domainEl.value, parsed.city || "astana");
 
   const level1Items = state.rubrics2gis.level1;
   fillSelectOptions(level1El, level1Items.map((x) => x.name), level1Items[0]?.name || "");
@@ -1083,6 +1137,11 @@ function render2gisRubricPicker() {
     syncLevel2("", "");
     applyToSearchUrl();
   });
+  domainEl.addEventListener("change", () => {
+    fill2gisCityOptions(cityEl, domainEl.value, "");
+    applyToSearchUrl();
+  });
+  cityEl.addEventListener("change", applyToSearchUrl);
   level2El.addEventListener("change", () => {
     syncLevel2(level2El.value, "");
     applyToSearchUrl();

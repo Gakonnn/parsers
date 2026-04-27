@@ -148,8 +148,11 @@ DEFAULT_DATABASE_URL = os.environ.get("PARSERS_HUB_DATABASE_URL", "postgresql://
 DEFAULT_HEADLESS = os.environ.get("PARSERS_DEFAULT_HEADLESS", "true").strip().lower() in {"1", "true", "yes", "on"}
 PARSERS_AGENT_TOKEN = os.environ.get("PARSERS_AGENT_TOKEN", "").strip()
 GIS_RUBRICS_XLSX = OLX_DIR / "Data.2gis_рубрики.xlsx"
+GIS_CITIES_JSON = GIS_DIR / "parser_2gis/data/cities.json"
 _RUBRICS_CACHE: dict[str, Any] | None = None
 _RUBRICS_CACHE_MTIME: float | None = None
+_GIS_CITIES_CACHE: dict[str, Any] | None = None
+_GIS_CITIES_CACHE_MTIME: float | None = None
 OLX_SITEMAP_URL = "https://www.olx.kz/sitemap/"
 _OLX_CATEGORIES_CACHE: dict[str, Any] | None = None
 _OLX_CATEGORIES_CACHE_AT: float = 0.0
@@ -1547,6 +1550,46 @@ def get_2gis_rubrics_tree() -> dict[str, Any]:
     return _RUBRICS_CACHE
 
 
+def _load_2gis_cities() -> dict[str, Any]:
+    if not GIS_CITIES_JSON.exists():
+        raise FileNotFoundError(f"2GIS cities file not found: {GIS_CITIES_JSON}")
+
+    with GIS_CITIES_JSON.open("r", encoding="utf-8") as fh:
+        raw_items = json.load(fh)
+
+    cities: list[dict[str, str]] = []
+    for item in raw_items if isinstance(raw_items, list) else []:
+        name = str(item.get("name", "")).strip()
+        code = str(item.get("code", "")).strip()
+        domain = str(item.get("domain", "")).strip().lower()
+        country_code = str(item.get("country_code", "")).strip().lower()
+        if not (name and code and domain):
+            continue
+        # 2GIS still accepts /astana/ in the public URL; keep that familiar slug in the hub UI.
+        if domain == "kz" and code == "nur_sultan":
+            code = "astana"
+        cities.append({"name": name, "code": code, "domain": domain, "country_code": country_code})
+
+    cities.sort(key=lambda x: (x["domain"] != "kz", x["domain"], x["name"].lower()))
+    domains = sorted({item["domain"] for item in cities})
+    return {
+        "updated_at": utc_now(),
+        "source_file": str(GIS_CITIES_JSON),
+        "cities": cities,
+        "domains": domains,
+        "stats": {"city_count": len(cities), "domain_count": len(domains)},
+    }
+
+
+def get_2gis_cities() -> dict[str, Any]:
+    global _GIS_CITIES_CACHE, _GIS_CITIES_CACHE_MTIME
+    mtime = GIS_CITIES_JSON.stat().st_mtime if GIS_CITIES_JSON.exists() else None
+    if _GIS_CITIES_CACHE is None or _GIS_CITIES_CACHE_MTIME != mtime:
+        _GIS_CITIES_CACHE = _load_2gis_cities()
+        _GIS_CITIES_CACHE_MTIME = mtime
+    return _GIS_CITIES_CACHE
+
+
 class _OlxSitemapAnchorParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
@@ -1737,6 +1780,12 @@ class AppHandler(BaseHTTPRequestHandler):
                 self._send_json(get_2gis_rubrics_tree())
             except Exception as exc:  # noqa: BLE001
                 self._send_json({"error": f"Failed to load 2GIS rubrics: {exc}"}, status=HTTPStatus.BAD_REQUEST)
+            return
+        if parsed.path == "/api/2gis/cities":
+            try:
+                self._send_json(get_2gis_cities())
+            except Exception as exc:  # noqa: BLE001
+                self._send_json({"error": f"Failed to load 2GIS cities: {exc}"}, status=HTTPStatus.BAD_REQUEST)
             return
         if parsed.path == "/api/olx/categories":
             try:
