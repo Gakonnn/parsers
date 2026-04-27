@@ -1155,9 +1155,15 @@ if (formEl) {
         const level1El = document.getElementById("olx-level1");
         const level2El = document.getElementById("olx-level2");
         const level3El = document.getElementById("olx-level3");
+        const locationEl = document.getElementById("olx-location");
         const categoryUrlInput = formEl.elements.category_url;
         if (categoryUrlInput && level1El) {
-          const url = buildOlxCategoryUrl(level1El.value, level2El?.value || "", level3El?.value || "");
+          const url = buildOlxCategoryUrl(
+            level1El.value,
+            level2El?.value || "",
+            level3El?.value || "",
+            locationEl?.value || "",
+          );
           if (url) categoryUrlInput.value = url;
         }
       }
