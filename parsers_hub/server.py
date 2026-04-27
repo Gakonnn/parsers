@@ -1044,6 +1044,7 @@ def parser_definitions() -> dict[str, Any]:
             "description": "Сбор телефонов с Krisha по странице листинга или одному объявлению с записью в PostgreSQL.",
             "output_ext": "json",
             "fields": [
+                {"name": "krisha_location_selector", "label": "Регион Krisha (область / город / район)", "type": "krisha_location_selector", "required": False, "default": ""},
                 {"name": "listing_url", "label": "Ссылка на листинг", "type": "url", "required": True, "default": "https://krisha.kz/prodazha/kvartiry/"},
                 {"name": "listing_limit", "label": "Лимит объявлений", "type": "number", "required": True, "default": 10},
                 {"name": "output_name", "label": "Имя файла", "type": "text", "required": False, "default": "result_random.json"},

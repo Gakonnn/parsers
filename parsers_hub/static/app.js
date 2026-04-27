@@ -16,6 +16,9 @@ const state = {
     level1: [],
     manualUrl: false,
   },
+  krishaLocations: {
+    manualUrl: false,
+  },
   db: {
     records: [],
     total: 0,
@@ -115,6 +118,239 @@ const OLX_LOCATIONS = [
 ];
 
 const OLX_LOCATION_SLUGS = new Set(OLX_LOCATIONS.flatMap((group) => group.cities.map((city) => city.slug)));
+
+const KRISHA_LOCATIONS = [
+  {
+    name: "Весь Казахстан",
+    alias: "",
+    type: "country",
+    cities: [],
+    districts: [],
+  },
+  {
+    name: "Алматы",
+    alias: "almaty",
+    type: "city",
+    cities: [],
+    districts: [
+      { name: "Алатауский р-н", alias: "almaty-alatauskij" },
+      { name: "Алмалинский р-н", alias: "almaty-almalinskij" },
+      { name: "Ауэзовский р-н", alias: "almaty-aujezovskij" },
+      { name: "Бостандыкский р-н", alias: "almaty-bostandykskij" },
+      { name: "Жетысуский р-н", alias: "almaty-zhetysuskij" },
+      { name: "Медеуский р-н", alias: "almaty-medeuskij" },
+      { name: "Наурызбайский р-н", alias: "almaty-nauryzbajskiy" },
+      { name: "Турксибский р-н", alias: "almaty-turksibskij" },
+    ],
+  },
+  {
+    name: "Астана",
+    alias: "astana",
+    type: "city",
+    cities: [],
+    districts: [
+      { name: "Алматы р-н", alias: "astana-almatinskij" },
+      { name: "Есильский р-н", alias: "astana-esilskij" },
+      { name: "Нура р-н", alias: "astana-nura" },
+      { name: "р-н Байконур", alias: "r-n-bajkonur" },
+      { name: "Сарайшык р-н", alias: "astana-saraishyk" },
+      { name: "Сарыарка р-н", alias: "astana-saryarkinskij" },
+    ],
+  },
+  {
+    name: "Шымкент",
+    alias: "shymkent",
+    type: "city",
+    cities: [],
+    districts: [
+      { name: "Абайский р-н", alias: "shymkent-abajskij" },
+      { name: "Аль-Фарабийский р-н", alias: "shymkent-al-farabijskij" },
+      { name: "Енбекшинский р-н", alias: "shymkent-enbekshinskij" },
+      { name: "Каратауский р-н", alias: "karatauskij" },
+      { name: "Туран р-н", alias: "shymkent-turan" },
+    ],
+  },
+  {
+    name: "Абай обл.",
+    alias: "abay-oblast",
+    type: "region",
+    cities: [
+      { name: "Семей", alias: "semej" },
+      { name: "Курчатов", alias: "kurchatov" },
+      { name: "Аягоз", alias: "ajagoz" },
+    ],
+  },
+  {
+    name: "Актюбинская обл.",
+    alias: "aktjubinskaja-oblast",
+    type: "region",
+    cities: [
+      { name: "Актобе", alias: "aktobe" },
+      { name: "Хромтау", alias: "hromtau" },
+      { name: "Кандыагаш", alias: "kandagash" },
+    ],
+  },
+  {
+    name: "Алматинская обл.",
+    alias: "almatinskaja-oblast",
+    type: "region",
+    cities: [
+      { name: "Конаев", alias: "konaev" },
+      { name: "Каскелен", alias: "kaskelen" },
+      { name: "Талгар", alias: "talgar" },
+      { name: "Есик", alias: "esik" },
+      { name: "Жаркент", alias: "zharkent" },
+      { name: "Узынагаш", alias: "uzynagash" },
+    ],
+  },
+  {
+    name: "Атырауская обл.",
+    alias: "atyrauskaja-oblast",
+    type: "region",
+    cities: [
+      { name: "Атырау", alias: "atyrau" },
+      { name: "Кульсары", alias: "kulsary" },
+    ],
+  },
+  {
+    name: "Восточно-Казахстанская обл.",
+    alias: "vostochno-kazahstanskaja-oblast",
+    type: "region",
+    cities: [
+      { name: "Усть-Каменогорск", alias: "ust-kamenogorsk" },
+      { name: "Риддер", alias: "ridder" },
+      { name: "Алтай", alias: "altaj" },
+    ],
+  },
+  {
+    name: "Жамбылская обл.",
+    alias: "zhambylskaja-oblast",
+    type: "region",
+    cities: [
+      { name: "Тараз", alias: "taraz" },
+      { name: "Шу", alias: "shu" },
+      { name: "Жанатас", alias: "zhanatas" },
+      { name: "Каратау", alias: "karatau" },
+    ],
+  },
+  {
+    name: "Жетысу обл.",
+    alias: "jetisyskaya-oblast",
+    type: "region",
+    cities: [
+      { name: "Талдыкорган", alias: "taldykorgan" },
+      { name: "Текели", alias: "tekeli" },
+      { name: "Сарканд", alias: "sarkand" },
+      { name: "Ушарал", alias: "usharal" },
+    ],
+  },
+  {
+    name: "Западно-Казахстанская обл.",
+    alias: "zapadno-kazahstanskaja-oblast",
+    type: "region",
+    cities: [
+      { name: "Уральск", alias: "uralsk" },
+      { name: "Аксай", alias: "aksaj" },
+    ],
+  },
+  {
+    name: "Карагандинская обл.",
+    alias: "karagandinskaja-oblast",
+    type: "region",
+    cities: [
+      { name: "Караганда", alias: "karaganda" },
+      { name: "Темиртау", alias: "temirtau" },
+      { name: "Балхаш", alias: "balhash" },
+      { name: "Сарань", alias: "saran" },
+      { name: "Шахтинск", alias: "shahtinsk" },
+    ],
+  },
+  {
+    name: "Костанайская обл.",
+    alias: "kostanajskaja-oblast",
+    type: "region",
+    cities: [
+      { name: "Костанай", alias: "kostanaj" },
+      { name: "Рудный", alias: "rudnyj" },
+      { name: "Лисаковск", alias: "lisakovsk" },
+    ],
+  },
+  {
+    name: "Кызылординская обл.",
+    alias: "kyzylordinskaja-oblast",
+    type: "region",
+    cities: [
+      { name: "Кызылорда", alias: "kyzylorda" },
+      { name: "Байконур", alias: "bajkonur" },
+    ],
+  },
+  {
+    name: "Мангистауская обл.",
+    alias: "mangistauskaja-oblast",
+    type: "region",
+    cities: [
+      { name: "Актау", alias: "aktau" },
+      { name: "Жанаозен", alias: "zhanaozen" },
+    ],
+  },
+  {
+    name: "Павлодарская обл.",
+    alias: "pavlodarskaja-oblast",
+    type: "region",
+    cities: [
+      { name: "Павлодар", alias: "pavlodar" },
+      { name: "Экибастуз", alias: "jekibastuz" },
+      { name: "Аксу", alias: "aksu" },
+    ],
+  },
+  {
+    name: "Северо-Казахстанская обл.",
+    alias: "severo-kazahstanskaja-oblast",
+    type: "region",
+    cities: [
+      { name: "Петропавловск", alias: "petropavlovsk" },
+    ],
+  },
+  {
+    name: "Туркестанская обл.",
+    alias: "juzhno-kazahstanskaja-oblast",
+    type: "region",
+    cities: [
+      { name: "Туркестан", alias: "turkestan" },
+      { name: "Кентау", alias: "kentau" },
+      { name: "Арыс", alias: "arys" },
+      { name: "Сарыагаш", alias: "saryagash" },
+    ],
+  },
+  {
+    name: "Улытауская обл.",
+    alias: "ulitayskay-oblast",
+    type: "region",
+    cities: [
+      { name: "Жезказган", alias: "zhezkazgan" },
+      { name: "Сатпаев", alias: "satpaev" },
+    ],
+  },
+  {
+    name: "Акмолинская обл.",
+    alias: "akmolinskaja-oblast",
+    type: "region",
+    cities: [
+      { name: "Кокшетау", alias: "kokshetau" },
+      { name: "Степногорск", alias: "stepnogorsk" },
+      { name: "Щучинск", alias: "shhuchinsk" },
+    ],
+  },
+];
+
+const KRISHA_LOCATION_ALIASES = new Set(
+  KRISHA_LOCATIONS.flatMap((item) => [
+    item.alias,
+    ...(item.cities || []).map((city) => city.alias),
+    ...(item.districts || []).map((district) => district.alias),
+    ...(item.cities || []).flatMap((city) => (city.districts || []).map((district) => district.alias)),
+  ]).filter(Boolean)
+);
 
 async function api(url, options = {}) {
   const response = await fetch(url, {
@@ -246,6 +482,20 @@ function renderForm() {
       return;
     }
 
+    if (field.type === "krisha_location_selector") {
+      const wrapper = document.createElement("div");
+      wrapper.className = "field full";
+      wrapper.innerHTML = `
+        <label>${field.label}</label>
+        <div id="krisha-location-picker" class="rubric-picker">
+          <div class="empty-state">Готовлю регионы Krisha...</div>
+        </div>
+      `;
+      formFieldsEl.appendChild(wrapper);
+      renderKrishaLocationPicker();
+      return;
+    }
+
     const wrapper = document.createElement("div");
     const fullWidth = field.type === "url" || field.name.includes("password");
     wrapper.className = `field ${fullWidth ? "full" : ""}`;
@@ -293,9 +543,16 @@ function renderForm() {
     if (state.selectedParser === "olx" && field.name === "category_url") {
       input.readOnly = !state.olxCategories.manualUrl;
     }
+    if (state.selectedParser === "krisha" && field.name === "listing_url") {
+      input.readOnly = !state.krishaLocations.manualUrl;
+    }
     wrapper.append(label, input);
     formFieldsEl.appendChild(wrapper);
   });
+
+  if (state.selectedParser === "krisha") {
+    renderKrishaLocationPicker();
+  }
 }
 
 function collectFormPayload() {
@@ -582,6 +839,140 @@ function renderOlxCategoryPicker() {
     manualBtn.textContent = state.olxCategories.manualUrl ? "Вернуть авто-режим" : "Редактировать вручную";
     if (!state.olxCategories.manualUrl) {
       applyOlxUrl();
+    }
+  });
+}
+
+function parseKrishaListingUrl(rawUrl) {
+  const fallback = { baseParts: ["prodazha", "kvartiry"], location: "" };
+  const text = String(rawUrl || "").trim();
+  const match = text.match(/^https?:\/\/(?:www\.)?krisha\.kz\/([^?#]+)(?:[?#].*)?$/i);
+  if (!match) return fallback;
+  const parts = match[1].replace(/\/+$/, "").split("/").filter(Boolean);
+  const location = KRISHA_LOCATION_ALIASES.has(parts[parts.length - 1]) ? parts.pop() : "";
+  return {
+    baseParts: parts.length ? parts : fallback.baseParts,
+    location,
+  };
+}
+
+function buildKrishaListingUrl(baseParts, location = "") {
+  const parts = Array.isArray(baseParts) && baseParts.length ? [...baseParts] : ["prodazha", "kvartiry"];
+  if (location) parts.push(location);
+  return `https://krisha.kz/${parts.join("/")}/`;
+}
+
+function findKrishaLocationByAlias(alias) {
+  if (!alias) return { root: KRISHA_LOCATIONS[0], city: null, district: null };
+  for (const root of KRISHA_LOCATIONS) {
+    if (root.alias === alias) return { root, city: null, district: null };
+    const rootDistrict = (root.districts || []).find((district) => district.alias === alias);
+    if (rootDistrict) return { root, city: null, district: rootDistrict };
+    for (const city of root.cities || []) {
+      if (city.alias === alias) return { root, city, district: null };
+      const cityDistrict = (city.districts || []).find((district) => district.alias === alias);
+      if (cityDistrict) return { root, city, district: cityDistrict };
+    }
+  }
+  return { root: KRISHA_LOCATIONS[0], city: null, district: null };
+}
+
+function getKrishaDistrictItems(root, city) {
+  if (city) return city.districts || [];
+  return root?.type === "city" ? root.districts || [] : [];
+}
+
+function renderKrishaLocationPicker() {
+  const picker = document.getElementById("krisha-location-picker");
+  if (!picker || state.selectedParser !== "krisha") return;
+
+  const listingUrlInput = formEl.elements.listing_url;
+  const parsed = parseKrishaListingUrl(listingUrlInput?.value);
+  const initial = findKrishaLocationByAlias(parsed.location);
+
+  picker.innerHTML = `
+    <div class="grid grid-2">
+      <div>
+        <label for="krisha-root-location">Область / город</label>
+        <select id="krisha-root-location"></select>
+      </div>
+      <div>
+        <label for="krisha-city-location">Город</label>
+        <select id="krisha-city-location"></select>
+      </div>
+      <div class="full">
+        <label for="krisha-district-location">Район</label>
+        <select id="krisha-district-location"></select>
+        <p class="field-hint">Как в region-dropdown Krisha: самый глубокий выбранный уровень добавляется в конец ссылки.</p>
+      </div>
+      <div class="full manual-input-row">
+        <button type="button" class="ghost-button" id="krisha-manual-btn">${state.krishaLocations.manualUrl ? "Вернуть авто-режим" : "Редактировать ссылку вручную"}</button>
+      </div>
+    </div>
+  `;
+
+  const rootEl = document.getElementById("krisha-root-location");
+  const cityEl = document.getElementById("krisha-city-location");
+  const districtEl = document.getElementById("krisha-district-location");
+  const manualBtn = document.getElementById("krisha-manual-btn");
+  if (!rootEl || !cityEl || !districtEl || !manualBtn || !listingUrlInput) return;
+
+  fillSelectOptionsObjects(
+    rootEl,
+    KRISHA_LOCATIONS.map((item) => ({ value: item.alias, label: item.name })),
+    initial.root?.alias || ""
+  );
+
+  const syncCities = (preferredCity = "", preferredDistrict = "") => {
+    const root = KRISHA_LOCATIONS.find((item) => item.alias === rootEl.value) || KRISHA_LOCATIONS[0];
+    const cities = root.cities || [];
+    fillSelectOptionsObjectsWithEmpty(
+      cityEl,
+      cities.map((city) => ({ value: city.alias, label: city.name })),
+      preferredCity,
+      root.type === "region" ? "Вся область" : "Не требуется"
+    );
+    cityEl.disabled = !cities.length;
+    const selectedCity = cities.find((city) => city.alias === cityEl.value) || null;
+    const districts = getKrishaDistrictItems(root, selectedCity);
+    fillSelectOptionsObjectsWithEmpty(
+      districtEl,
+      districts.map((district) => ({ value: district.alias, label: district.name })),
+      preferredDistrict,
+      "Весь город / регион"
+    );
+    districtEl.disabled = !districts.length;
+  };
+
+  const selectedAlias = () => districtEl.value || cityEl.value || rootEl.value || "";
+
+  const applyKrishaUrl = () => {
+    if (state.krishaLocations.manualUrl) return;
+    const current = parseKrishaListingUrl(listingUrlInput.value);
+    const url = buildKrishaListingUrl(current.baseParts, selectedAlias());
+    listingUrlInput.value = url;
+    setFormMessage(`Ссылка обновлена: ${url}`);
+  };
+
+  syncCities(initial.city?.alias || "", initial.district?.alias || "");
+  listingUrlInput.readOnly = !state.krishaLocations.manualUrl;
+
+  rootEl.addEventListener("change", () => {
+    syncCities("", "");
+    applyKrishaUrl();
+  });
+  cityEl.addEventListener("change", () => {
+    syncCities(cityEl.value, "");
+    applyKrishaUrl();
+  });
+  districtEl.addEventListener("change", applyKrishaUrl);
+
+  manualBtn.addEventListener("click", () => {
+    state.krishaLocations.manualUrl = !state.krishaLocations.manualUrl;
+    listingUrlInput.readOnly = !state.krishaLocations.manualUrl;
+    manualBtn.textContent = state.krishaLocations.manualUrl ? "Вернуть авто-режим" : "Редактировать ссылку вручную";
+    if (!state.krishaLocations.manualUrl) {
+      applyKrishaUrl();
     }
   });
 }
@@ -1179,6 +1570,18 @@ if (formEl) {
           const rubric = (level3El?.value || level2El?.value || level1El?.value || "").trim();
           const url = build2gisSearchUrl(domainEl.value, cityEl.value, rubric);
           if (url) searchUrlInput.value = url;
+        }
+      }
+
+      if (state.selectedParser === "krisha" && !state.krishaLocations.manualUrl) {
+        const rootEl = document.getElementById("krisha-root-location");
+        const cityEl = document.getElementById("krisha-city-location");
+        const districtEl = document.getElementById("krisha-district-location");
+        const listingUrlInput = formEl.elements.listing_url;
+        if (rootEl && listingUrlInput) {
+          const current = parseKrishaListingUrl(listingUrlInput.value);
+          const location = districtEl?.value || cityEl?.value || rootEl.value || "";
+          listingUrlInput.value = buildKrishaListingUrl(current.baseParts, location);
         }
       }
       const payload = collectFormPayload();
