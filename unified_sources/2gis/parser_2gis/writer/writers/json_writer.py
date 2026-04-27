@@ -6,6 +6,7 @@ from typing import Any
 
 from ...logger import logger
 from .file_writer import FileWriter
+from unified_parsers.phone_utils import normalize_2gis_contact_phones
 
 
 class JSONWriter(FileWriter):
@@ -24,7 +25,7 @@ class JSONWriter(FileWriter):
 
     def _writedoc(self, catalog_doc: Any) -> None:
         """Write a `catalog_doc` into JSON document."""
-        item = catalog_doc['result']['items'][0]
+        item = normalize_2gis_contact_phones(catalog_doc['result']['items'][0])
 
         if self._options.verbose:
             try:
@@ -51,6 +52,6 @@ class JSONWriter(FileWriter):
             return
 
         self._writedoc(catalog_doc)
-        item = catalog_doc['result']['items'][0]
+        item = normalize_2gis_contact_phones(catalog_doc['result']['items'][0])
         external_id = str(item.get('id', '') or item.get('url', '') or item.get('name', '')).strip()
         self._live_db_insert(item, external_id)

@@ -17,6 +17,8 @@ from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 from urllib.request import Request, urlopen
 from xml.sax.saxutils import escape as xml_escape
 
+from unified_parsers.phone_utils import normalize_phone_number
+
 try:
     import psycopg2
     from psycopg2.extras import Json
@@ -397,10 +399,11 @@ def fetch_phone(ad_id: str, provider: str = DEFAULT_PHONE_PROXY_PROVIDER) -> str
                     cleaned = clean_text(str(phone.get("number", "")))
                 else:
                     cleaned = ""
-                if cleaned:
-                    normalized.append(cleaned)
+                compact_phone = normalize_phone_number(cleaned)
+                if compact_phone:
+                    normalized.append(compact_phone)
             if normalized:
-                return ", ".join(normalized)
+                return ";".join(dict.fromkeys(normalized))
 
     return ""
 

@@ -32,6 +32,12 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import ProxyHandler, Request, build_opener
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from unified_parsers.phone_utils import normalize_phone_number, normalize_phone_numbers
+
 try:
     from selenium import webdriver
     from selenium.common.exceptions import InvalidArgumentException, NoSuchElementException, TimeoutException, WebDriverException
@@ -616,7 +622,7 @@ def extract_phones(data: Any) -> list[str]:
                 else:
                     phones.update(PHONE_RE.findall(value))
 
-    normalized = sorted({re.sub(r"\s+", " ", p).strip() for p in phones})
+    normalized = sorted({phone for p in phones for phone in normalize_phone_numbers(p)})
     return normalized
 
 
@@ -1303,24 +1309,7 @@ def send_chat_message(driver: Any, message_text: str, timeout: float) -> bool:
 
 
 def normalize_phone_candidate(raw: str) -> str | None:
-    candidate = re.sub(r"\s+", " ", raw).strip()
-    digits = re.sub(r"\D", "", candidate)
-    if len(digits) < 10 or len(digits) > 12:
-        return None
-    if len(digits) == 11 and digits.startswith(("7", "8")):
-        local = digits[1:]
-        if not local.startswith("7"):
-            return None
-        return f"+7 {local[0:3]} {local[3:6]}-{local[6:8]}-{local[8:10]}"
-    if len(digits) == 10 and digits.startswith("7"):
-        return f"+7 {digits[0:3]} {digits[3:6]}-{digits[6:8]}-{digits[8:10]}"
-    if len(digits) == 12 and digits.startswith("77"):
-        trimmed = digits[-11:]
-        local = trimmed[1:]
-        if not local.startswith("7"):
-            return None
-        return f"+7 {local[0:3]} {local[3:6]}-{local[6:8]}-{local[8:10]}"
-    return None
+    return normalize_phone_number(raw) or None
 
 
 def normalize_text_value(raw: str) -> str:
@@ -2027,7 +2016,7 @@ def fetch_phone_with_active_driver(
     )
     if app_phones:
         save_session_cookies()
-        return build_row(status="ok", phones_value="; ".join(app_phones))
+        return build_row(status="ok", phones_value=";".join(app_phones))
     if app_condition == "auth_required":
         rotator.block_proxy(proxy)
         if proxy_blacklist_file:
@@ -2046,7 +2035,7 @@ def fetch_phone_with_active_driver(
         seller_name = chat_api_seller
     if chat_api_phones:
         save_session_cookies()
-        return build_row(status="ok", phones_value="; ".join(chat_api_phones))
+        return build_row(status="ok", phones_value=";".join(chat_api_phones))
     if chat_api_condition == "auth_required":
         rotator.block_proxy(proxy)
         if proxy_blacklist_file:
@@ -2098,7 +2087,7 @@ def fetch_phone_with_active_driver(
         phones_via_endpoint, endpoint_condition = fetch_phones_via_page_endpoint(driver, phones_url)
         if phones_via_endpoint:
             save_session_cookies()
-            return build_row(status="ok", phones_value="; ".join(phones_via_endpoint))
+            return build_row(status="ok", phones_value=";".join(phones_via_endpoint))
         if endpoint_condition == "auth_required":
             rotator.block_proxy(proxy)
             if proxy_blacklist_file:
@@ -2109,7 +2098,7 @@ def fetch_phone_with_active_driver(
 
     if phones:
         save_session_cookies()
-        return build_row(status="ok", phones_value="; ".join(phones))
+        return build_row(status="ok", phones_value=";".join(phones))
 
     if not send_chat_message_enabled:
         return build_row(status="no_phone")
@@ -2133,7 +2122,7 @@ def fetch_phone_with_active_driver(
     phones = extract_phone_text_from_page(driver)
     if phones:
         save_session_cookies()
-        return build_row(status="ok", phones_value="; ".join(phones))
+        return build_row(status="ok", phones_value=";".join(phones))
     return build_row(status="no_phone")
 
 
@@ -2521,7 +2510,7 @@ def fetch_phone_for_ad(
         return {
             "ad_url": ad_url,
             "ad_id": ad_id,
-            "phones": "; ".join(phones),
+            "phones": ";".join(phones),
             "status": "ok" if phones else "no_phone",
             "proxy": ajax_result.proxy,
             "error": "",

@@ -12,6 +12,7 @@ from ...common import report_from_validation_error
 from ...logger import logger
 from ..models import CatalogItem
 from .file_writer import FileWriter
+from unified_parsers.phone_utils import normalize_phone_number
 
 
 class CSVWriter(FileWriter):
@@ -290,7 +291,7 @@ class CSVWriter(FileWriter):
             # Phone (`value` sometimes has strange crap inside, so we better parse `text`.
             # If no `text` field in contact - use `value` attribute)
             append_contact('phone', ['text', 'value'],
-                           formatter=lambda x: re.sub(r'^\+7', '8', re.sub(r'[^0-9+]', '', x)))
+                           formatter=normalize_phone_number)
 
         # Schedule
         if catalog_item.schedule:

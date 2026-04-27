@@ -15,6 +15,8 @@ except ModuleNotFoundError:  # pragma: no cover
     psycopg2 = None
     Json = None
 
+from .phone_utils import normalize_payload_phone_fields
+
 
 class PostgresSinkError(RuntimeError):
     """Errors raised while persisting parser data to PostgreSQL."""
@@ -49,6 +51,7 @@ def persist_output_to_postgres(
                 (run_id, source, status, json.dumps(metrics, ensure_ascii=False)),
             )
             for record in records:
+                record = normalize_payload_phone_fields(record)
                 external_id = _extract_external_id(source, record)
                 cur.execute(
                     """
