@@ -675,6 +675,136 @@ def fetch_ads_from_listing_selenium(
     return ads[:limit]
 
 
+def fetch_listing_page_html_selenium(
+    listing_url: str,
+    page: int,
+    *,
+    browser: str,
+    timeout: float,
+    headless: bool,
+    chrome_binary: str,
+    chrome_user_data_dir: str,
+    chrome_profile_directory: str,
+    cookie: str,
+    cookie_base_file: str,
+) -> str:
+    driver = None
+    try:
+        driver = build_driver(
+            browser,
+            DIRECT_PROXY,
+            timeout=timeout,
+            headless=headless,
+            chrome_binary=chrome_binary,
+            chrome_user_data_dir=chrome_user_data_dir,
+            chrome_profile_directory=chrome_profile_directory,
+        )
+        browser_cookies = load_browser_cookies(cookie_json_path(cookie_base_file))
+        inject_cookies(driver, cookie, browser_cookies)
+
+        page_url = listing_url if page == 1 else f"{listing_url.rstrip('/')}/?page={page}"
+        if not safe_get(driver, page_url, timeout_override=max(timeout, 15.0)):
+            return ""
+        try:
+            WebDriverWait(driver, min(max(timeout, 4.0), 12.0)).until(
+                lambda drv: bool(extract_listing_ad_urls(drv.page_source))
+            )
+        except TimeoutException:
+            pass
+        return driver.page_source
+    finally:
+        if driver is not None:
+            cleanup_driver(driver)
+
+
+def iter_listing_ad_pages(
+    listing_url: str,
+    limit: int,
+    rotator: ProxyRotator,
+    base_headers: dict[str, str],
+    *,
+    attempts_per_page: int = 3,
+    empty_page_tolerance: int = 3,
+    use_selenium_fallback: bool = False,
+    browser: str = "chrome",
+    timeout: float = 12.0,
+    headless: bool = True,
+    chrome_binary: str = "",
+    chrome_user_data_dir: str = "",
+    chrome_profile_directory: str = "",
+    cookie: str = "",
+    cookie_base_file: str = "",
+):
+    seen: set[str] = set()
+    page = 1
+    consecutive_empty_pages = 0
+    collected = 0
+
+    while collected < limit:
+        page_url = listing_url if page == 1 else f"{listing_url.rstrip('/')}/?page={page}"
+        last_error: Exception | None = None
+        html = ""
+        for attempt in range(max(1, attempts_per_page)):
+            try:
+                result = rotator.request("GET", page_url, headers=base_headers)
+                html = result.response.text
+                break
+            except RuntimeError as exc:
+                last_error = exc
+                if attempt + 1 >= attempts_per_page:
+                    html = ""
+                    break
+                time.sleep(0.8 * (attempt + 1))
+
+        if not html and use_selenium_fallback:
+            html = fetch_listing_page_html_selenium(
+                listing_url,
+                page,
+                browser=browser,
+                timeout=timeout,
+                headless=headless,
+                chrome_binary=chrome_binary,
+                chrome_user_data_dir=chrome_user_data_dir,
+                chrome_profile_directory=chrome_profile_directory,
+                cookie=cookie,
+                cookie_base_file=cookie_base_file,
+            )
+
+        if not html:
+            if last_error:
+                raise last_error
+            break
+
+        page_ads = extract_listing_ad_urls(html)
+        print(f"[listing] page={page} url={page_url} ads={len(page_ads)}")
+        if not page_ads:
+            consecutive_empty_pages += 1
+            if consecutive_empty_pages >= empty_page_tolerance:
+                break
+            page += 1
+            continue
+
+        page_batch: list[str] = []
+        for url in page_ads:
+            if url in seen:
+                continue
+            seen.add(url)
+            page_batch.append(url)
+            collected += 1
+            if collected >= limit:
+                break
+
+        if page_batch:
+            consecutive_empty_pages = 0
+            yield page_batch
+        else:
+            consecutive_empty_pages += 1
+            if consecutive_empty_pages >= empty_page_tolerance:
+                break
+
+        page += 1
+
+
 def parse_ajax_params(url: str) -> tuple[str | None, str | None]:
     parsed = urlparse(url)
     if not parsed.path.endswith("/ajaxPhones"):
@@ -2911,131 +3041,186 @@ def main() -> int:
         )
         return 0
 
+    resume_state = load_checkpoint(checkpoint_path)
+    rows: list[dict[str, str]] = []
     ads: list[str] = []
     if args.ads_file:
         ads.extend(load_lines(Path(args.ads_file)))
     if args.ad_url:
         ads.append(args.ad_url.strip())
-    if not ads:
-        listing_limit = args.listing_limit if args.listing_limit > 0 else prompt_listing_limit()
-        listing_timeout = min(args.timeout, 8.0)
-        listing_attempts = 1 if args.no_proxy else 3
-        try:
-            ads = fetch_ads_from_listing(
-                args.listing_url,
-                listing_limit,
+
+    if ads:
+        if args.shuffle and len(ads) > 1:
+            random.shuffle(ads)
+
+        if args.driver == "selenium":
+            rows = fetch_phones_for_ads_selenium(
+                ads,
                 rotator,
-                base_headers,
-                attempts_per_page=listing_attempts,
-            )
-        except RuntimeError as exc:
-            if args.driver != "selenium":
-                raise
-            print(f"HTTP listing fetch failed, trying Selenium listing fallback: {exc}")
-            ads = fetch_ads_from_listing_selenium(
-                args.listing_url,
-                listing_limit,
                 browser=args.browser,
-                timeout=listing_timeout,
-                headless=args.headless,
-                chrome_binary=chrome_binary,
-                chrome_user_data_dir=chrome_user_data_dir,
-                chrome_profile_directory=chrome_profile_directory,
                 cookie=cookie,
                 cookie_base_file=cookie_base_file,
-            )
-        if not ads:
-            raise ValueError(f"No ads found on listing page: {args.listing_url}")
-        print(f"Collected {len(ads)} ads from listing page.")
-    if args.shuffle and len(ads) > 1:
-        random.shuffle(ads)
-
-    resume_state = load_checkpoint(checkpoint_path)
-
-    if args.driver == "selenium":
-        rows = fetch_phones_for_ads_selenium(
-            ads,
-            rotator,
-            browser=args.browser,
-            cookie=cookie,
-            cookie_base_file=cookie_base_file,
-            proxy_blacklist_file=args.proxy_blacklist_file,
-            account_login=args.account_login.strip(),
-            account_password=args.account_password,
-            timeout=args.timeout,
-            proxy_failover_timeout=args.proxy_failover_timeout,
-            auth_timeout=args.auth_timeout,
-            delay_sec=args.delay,
-            random_delay_min=args.random_delay_min,
-            random_delay_max=args.random_delay_max,
-            headless=args.headless,
-            manual_login=args.manual_login,
-            cookies_only=args.cookies_only,
-            chat_message=args.chat_message,
-            send_chat_message_enabled=args.send_chat_message,
-            chat_app_id=args.chat_app_id.strip(),
-            chat_app_key=args.chat_app_key.strip(),
-            chat_current_user=args.chat_current_user.strip(),
-            chrome_binary=chrome_binary,
-            chrome_user_data_dir=chrome_user_data_dir,
-            chrome_profile_directory=chrome_profile_directory,
-            checkpoint_path=checkpoint_path,
-            resume_state=resume_state,
-            listing_url=args.listing_url,
-            on_row=live_db_writer.insert_row if live_db_writer else None,
-        )
-    else:
-        rows = []
-        total = len(ads)
-        ad_index = 0
-        if resume_state:
-            saved_listing = str(resume_state.get("listing_url", "")).strip()
-            saved_ads = resume_state.get("ads", [])
-            if saved_listing == args.listing_url and isinstance(saved_ads, list) and saved_ads == ads:
-                saved_rows = resume_state.get("rows", [])
-                if isinstance(saved_rows, list):
-                    rows = [row for row in saved_rows if isinstance(row, dict)]
-                ad_index = max(0, min(int(resume_state.get("ad_index", 0)), total))
-                if rows:
-                    print(f"  -> resume checkpoint loaded: rows={len(rows)}, next={ad_index + 1}")
-
-        def persist_checkpoint() -> None:
-            save_checkpoint(
-                checkpoint_path,
-                {
-                    "version": 1,
-                    "source": "krisha",
-                    "listing_url": args.listing_url,
-                    "ads": ads,
-                    "ad_index": ad_index,
-                    "rows": rows,
-                    "updated_at": time.time(),
-                },
-            )
-
-        for idx, ad_url in enumerate(ads[ad_index:], start=ad_index + 1):
-            print(f"[{idx}/{total}] {ad_url}")
-            row = fetch_phone_for_ad(
-                ad_url,
-                rotator,
-                base_headers,
+                proxy_blacklist_file=args.proxy_blacklist_file,
+                account_login=args.account_login.strip(),
+                account_password=args.account_password,
+                timeout=args.timeout,
+                proxy_failover_timeout=args.proxy_failover_timeout,
+                auth_timeout=args.auth_timeout,
                 delay_sec=args.delay,
                 random_delay_min=args.random_delay_min,
                 random_delay_max=args.random_delay_max,
+                headless=args.headless,
+                manual_login=args.manual_login,
+                cookies_only=args.cookies_only,
+                chat_message=args.chat_message,
+                send_chat_message_enabled=args.send_chat_message,
+                chat_app_id=args.chat_app_id.strip(),
+                chat_app_key=args.chat_app_key.strip(),
+                chat_current_user=args.chat_current_user.strip(),
+                chrome_binary=chrome_binary,
+                chrome_user_data_dir=chrome_user_data_dir,
+                chrome_profile_directory=chrome_profile_directory,
+                checkpoint_path=checkpoint_path,
+                resume_state=resume_state,
+                listing_url=args.listing_url,
+                on_row=live_db_writer.insert_row if live_db_writer else None,
             )
-            rows.append(row)
-            if live_db_writer:
-                live_db_writer.insert_row(row)
-            status = row["status"]
-            proxy = row["proxy"] or "-"
-            phones = row["phones"] or "-"
-            print(f"  -> status={status}, proxy={proxy}, phones={phones}")
-            if row["error"]:
-                print(f"  -> error={row['error']}")
-            ad_index = idx
-            persist_checkpoint()
-        if live_db_writer and rows:
-            live_db_writer._processed = len(rows)
+        else:
+            total = len(ads)
+            ad_index = 0
+            if resume_state:
+                saved_listing = str(resume_state.get("listing_url", "")).strip()
+                saved_ads = resume_state.get("ads", [])
+                if saved_listing == args.listing_url and isinstance(saved_ads, list) and saved_ads == ads:
+                    saved_rows = resume_state.get("rows", [])
+                    if isinstance(saved_rows, list):
+                        rows = [row for row in saved_rows if isinstance(row, dict)]
+                    ad_index = max(0, min(int(resume_state.get("ad_index", 0)), total))
+                    if rows:
+                        print(f"  -> resume checkpoint loaded: rows={len(rows)}, next={ad_index + 1}")
+
+            def persist_checkpoint() -> None:
+                save_checkpoint(
+                    checkpoint_path,
+                    {
+                        "version": 1,
+                        "source": "krisha",
+                        "listing_url": args.listing_url,
+                        "ads": ads,
+                        "ad_index": ad_index,
+                        "rows": rows,
+                        "updated_at": time.time(),
+                    },
+                )
+
+            for idx, ad_url in enumerate(ads[ad_index:], start=ad_index + 1):
+                print(f"[{idx}/{total}] {ad_url}")
+                row = fetch_phone_for_ad(
+                    ad_url,
+                    rotator,
+                    base_headers,
+                    delay_sec=args.delay,
+                    random_delay_min=args.random_delay_min,
+                    random_delay_max=args.random_delay_max,
+                )
+                rows.append(row)
+                if live_db_writer:
+                    live_db_writer.insert_row(row)
+                status = row["status"]
+                proxy = row["proxy"] or "-"
+                phones = row["phones"] or "-"
+                print(f"  -> status={status}, proxy={proxy}, phones={phones}")
+                if row["error"]:
+                    print(f"  -> error={row['error']}")
+                ad_index = idx
+                persist_checkpoint()
+            if live_db_writer and rows:
+                live_db_writer._processed = len(rows)
+    else:
+        listing_limit = args.listing_limit if args.listing_limit > 0 else prompt_listing_limit()
+        listing_attempts = 1 if args.no_proxy else 3
+        listing_timeout = min(args.timeout, 8.0)
+        page_count = 0
+        collected = 0
+
+        for page_ads in iter_listing_ad_pages(
+            args.listing_url,
+            listing_limit,
+            rotator,
+            base_headers,
+            attempts_per_page=listing_attempts,
+            use_selenium_fallback=args.driver == "selenium",
+            browser=args.browser,
+            timeout=listing_timeout,
+            headless=args.headless,
+            chrome_binary=chrome_binary,
+            chrome_user_data_dir=chrome_user_data_dir,
+            chrome_profile_directory=chrome_profile_directory,
+            cookie=cookie,
+            cookie_base_file=cookie_base_file,
+        ):
+            if not page_ads:
+                continue
+            page_count += 1
+            collected += len(page_ads)
+            print(f"Collected page {page_count} with {len(page_ads)} ads. Parsing now...")
+            if args.driver == "selenium":
+                batch_rows = fetch_phones_for_ads_selenium(
+                    page_ads,
+                    rotator,
+                    browser=args.browser,
+                    cookie=cookie,
+                    cookie_base_file=cookie_base_file,
+                    proxy_blacklist_file=args.proxy_blacklist_file,
+                    account_login=args.account_login.strip(),
+                    account_password=args.account_password,
+                    timeout=args.timeout,
+                    proxy_failover_timeout=args.proxy_failover_timeout,
+                    auth_timeout=args.auth_timeout,
+                    delay_sec=args.delay,
+                    random_delay_min=args.random_delay_min,
+                    random_delay_max=args.random_delay_max,
+                    headless=args.headless,
+                    manual_login=args.manual_login,
+                    cookies_only=args.cookies_only,
+                    chat_message=args.chat_message,
+                    send_chat_message_enabled=args.send_chat_message,
+                    chat_app_id=args.chat_app_id.strip(),
+                    chat_app_key=args.chat_app_key.strip(),
+                    chat_current_user=args.chat_current_user.strip(),
+                    chrome_binary=chrome_binary,
+                    chrome_user_data_dir=chrome_user_data_dir,
+                    chrome_profile_directory=chrome_profile_directory,
+                    checkpoint_path=checkpoint_path,
+                    resume_state=None,
+                    listing_url=args.listing_url,
+                    on_row=live_db_writer.insert_row if live_db_writer else None,
+                )
+                rows.extend(batch_rows)
+            else:
+                for idx, ad_url in enumerate(page_ads, start=1):
+                    print(f"[{len(rows) + idx}/{listing_limit}] {ad_url}")
+                    row = fetch_phone_for_ad(
+                        ad_url,
+                        rotator,
+                        base_headers,
+                        delay_sec=args.delay,
+                        random_delay_min=args.random_delay_min,
+                        random_delay_max=args.random_delay_max,
+                    )
+                    rows.append(row)
+                    if live_db_writer:
+                        live_db_writer.insert_row(row)
+                    status = row["status"]
+                    proxy = row["proxy"] or "-"
+                    phones = row["phones"] or "-"
+                    print(f"  -> status={status}, proxy={proxy}, phones={phones}")
+                    if row["error"]:
+                        print(f"  -> error={row['error']}")
+
+        if not rows:
+            raise ValueError(f"No ads found on listing page: {args.listing_url}")
+        print(f"Collected {len(rows)} ads from listing pages.")
 
     if live_db_writer and rows:
         live_db_writer._processed = len(rows)

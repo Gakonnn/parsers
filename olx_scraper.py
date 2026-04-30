@@ -511,14 +511,13 @@ def build_page_url(category_url: str, page: int) -> str:
     return urlunparse(parsed._replace(query=urlencode(query)))
 
 
-def collect_listing_urls(category_url: str, limit: int) -> list[str]:
-    collected: list[str] = []
+def iter_listing_urls(category_url: str, limit: int):
     seen: set[str] = set()
     page = 1
     consecutive_empty_pages = 0
     max_consecutive_empty_pages = 3
 
-    while len(collected) < limit:
+    while len(seen) < limit:
         page_url = build_page_url(category_url, page)
         html = fetch_text(page_url)
         page_urls = extract_listing_urls_from_category(html)
@@ -535,9 +534,9 @@ def collect_listing_urls(category_url: str, limit: int) -> list[str]:
             if url in seen:
                 continue
             seen.add(url)
-            collected.append(url)
             page_added += 1
-            if len(collected) >= limit:
+            yield url
+            if len(seen) >= limit:
                 break
 
         if page_added == 0:
@@ -548,7 +547,9 @@ def collect_listing_urls(category_url: str, limit: int) -> list[str]:
             consecutive_empty_pages = 0
         page += 1
 
-    return collected[:limit]
+
+def collect_listing_urls(category_url: str, limit: int) -> list[str]:
+    return list(iter_listing_urls(category_url, limit))
 
 
 def col_name(index: int) -> str:
@@ -741,63 +742,64 @@ def main() -> int:
             return 1
         print(f"[db] live mode enabled run_id={db_writer.run_id}")
 
+    listings: list[ListingData] = []
+    skipped = 0
+    found_any = False
+
     try:
-        listing_urls = collect_listing_urls(category_url, limit)
+        listing_iter = iter_listing_urls(category_url, limit)
+        print("Начинаю парсинг объявлений по мере загрузки страниц...")
+        for index, url in enumerate(listing_iter, start=1):
+            found_any = True
+            try:
+                listing = parse_listing(url, phone_provider=phone_provider)
+            except HTTPError as exc:
+                skipped += 1
+                print(
+                    f"[WARN] Пропуск [{index}]: HTTP {exc.code} при загрузке {url}",
+                    file=sys.stderr,
+                )
+                continue
+            except URLError as exc:
+                skipped += 1
+                print(
+                    f"[WARN] Пропуск [{index}]: ошибка сети при загрузке {url}: {exc}",
+                    file=sys.stderr,
+                )
+                continue
+            except Exception as exc:  # noqa: BLE001
+                skipped += 1
+                print(f"[WARN] Пропуск [{index}]: не удалось обработать {url}: {exc}", file=sys.stderr)
+                continue
+            listings.append(listing)
+            if db_writer:
+                try:
+                    db_writer.insert_listing(listing)
+                except Exception as exc:  # noqa: BLE001
+                    print(f"[ERROR] Не удалось сохранить запись в PostgreSQL: {exc}", file=sys.stderr)
+                    db_writer.finish(status="failed", processed=len(listings), skipped=skipped, errors=1)
+                    db_writer.close()
+                    return 1
+            print(f"[{index}] Обработано: {listing.title or url}")
     except HTTPError as exc:
         print(f"[ERROR] HTTP {exc.code} при загрузке категории {category_url}", file=sys.stderr)
         if db_writer:
-            db_writer.finish(status="failed", processed=0, skipped=0, errors=1)
+            db_writer.finish(status="failed", processed=len(listings), skipped=skipped, errors=1)
             db_writer.close()
         return 1
     except URLError as exc:
         print(f"[ERROR] Ошибка сети при загрузке категории {category_url}: {exc}", file=sys.stderr)
         if db_writer:
-            db_writer.finish(status="failed", processed=0, skipped=0, errors=1)
+            db_writer.finish(status="failed", processed=len(listings), skipped=skipped, errors=1)
             db_writer.close()
         return 1
 
-    if not listing_urls:
+    if not found_any:
         print("[ERROR] Не удалось найти объявления в указанной категории.", file=sys.stderr)
         if db_writer:
             db_writer.finish(status="failed", processed=0, skipped=0, errors=1)
             db_writer.close()
         return 1
-
-    print(f"Найдено {len(listing_urls)} ссылок. Начинаю парсинг объявлений...")
-
-    listings: list[ListingData] = []
-    skipped = 0
-    for index, url in enumerate(listing_urls, start=1):
-        try:
-            listing = parse_listing(url, phone_provider=phone_provider)
-        except HTTPError as exc:
-            skipped += 1
-            print(
-                f"[WARN] Пропуск [{index}/{len(listing_urls)}]: HTTP {exc.code} при загрузке {url}",
-                file=sys.stderr,
-            )
-            continue
-        except URLError as exc:
-            skipped += 1
-            print(
-                f"[WARN] Пропуск [{index}/{len(listing_urls)}]: ошибка сети при загрузке {url}: {exc}",
-                file=sys.stderr,
-            )
-            continue
-        except Exception as exc:  # noqa: BLE001
-            skipped += 1
-            print(f"[WARN] Пропуск [{index}/{len(listing_urls)}]: не удалось обработать {url}: {exc}", file=sys.stderr)
-            continue
-        listings.append(listing)
-        if db_writer:
-            try:
-                db_writer.insert_listing(listing)
-            except Exception as exc:  # noqa: BLE001
-                print(f"[ERROR] Не удалось сохранить запись в PostgreSQL: {exc}", file=sys.stderr)
-                db_writer.finish(status="failed", processed=len(listings), skipped=skipped, errors=1)
-                db_writer.close()
-                return 1
-        print(f"[{index}/{len(listing_urls)}] Обработано: {listing.title or url}")
 
     if not listings:
         print(
