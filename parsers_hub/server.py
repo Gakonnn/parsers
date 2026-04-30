@@ -88,6 +88,12 @@ def extract_progress_from_log(log_text: str) -> tuple[int, int]:
     current = 0
     total = 0
     for line in (log_text or "").splitlines():
+        progress_match = re.search(r"\[progress\]\s+(\d+)\s*/\s*(\d+)", line, re.IGNORECASE)
+        if progress_match:
+            current = max(current, int(progress_match.group(1)))
+            total = max(total, int(progress_match.group(2)))
+            continue
+
         ratio_match = re.search(r"\[(\d+)\s*/\s*(\d+)\]", line)
         if ratio_match:
             current = max(current, int(ratio_match.group(1)))

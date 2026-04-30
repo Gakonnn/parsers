@@ -3197,6 +3197,7 @@ def main() -> int:
                     on_row=live_db_writer.insert_row if live_db_writer else None,
                 )
                 rows.extend(batch_rows)
+                print(f"[progress] {len(rows)}/{listing_limit}")
             else:
                 for idx, ad_url in enumerate(page_ads, start=1):
                     print(f"[{len(rows) + idx}/{listing_limit}] {ad_url}")
@@ -3217,6 +3218,7 @@ def main() -> int:
                     print(f"  -> status={status}, proxy={proxy}, phones={phones}")
                     if row["error"]:
                         print(f"  -> error={row['error']}")
+                    print(f"[progress] {len(rows)}/{listing_limit}")
 
         if not rows:
             raise ValueError(f"No ads found on listing page: {args.listing_url}")

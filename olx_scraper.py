@@ -780,7 +780,7 @@ def main() -> int:
                     db_writer.finish(status="failed", processed=len(listings), skipped=skipped, errors=1)
                     db_writer.close()
                     return 1
-            print(f"[{index}] Обработано: {listing.title or url}")
+            print(f"[{index}/{limit}] Обработано: {listing.title or url}")
     except HTTPError as exc:
         print(f"[ERROR] HTTP {exc.code} при загрузке категории {category_url}", file=sys.stderr)
         if db_writer:

@@ -30,7 +30,8 @@ class RunReport:
 
 
 class MetricsCollector:
-    _processed_line = re.compile(r"\[\d+/\d+\]\s+Обработано:", re.I)
+    _processed_line = re.compile(r"\[\d+\s*/\s*\d+\]\s+(?:Обработано:|https?://)", re.I)
+    _progress_line = re.compile(r"\[progress\]\s+(\d+)\s*/\s*(\d+)", re.I)
     _saved_olx = re.compile(r"Сохранено\s+(\d+)\s+объявлен", re.I)
     _skipped_olx = re.compile(r"Пропущено\s+объявлений:\s*(\d+)", re.I)
 
@@ -44,7 +45,10 @@ class MetricsCollector:
     def consume(self, line: str) -> None:
         text = line.strip()
         lower = text.lower()
-        if self._processed_line.search(text):
+        progress_match = self._progress_line.search(text)
+        if progress_match:
+            self.processed = max(self.processed, int(progress_match.group(1)))
+        elif self._processed_line.search(text):
             self.processed += 1
         if "[warn]" in lower and "пропуск" in lower:
             self.skipped += 1
