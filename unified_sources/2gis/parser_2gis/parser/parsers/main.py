@@ -163,6 +163,17 @@ class MainParser:
             self._chrome_remote.perform_click(available_pages[n_page])
             return n_page
 
+        fallback_url = re.sub(r'/page/\d+', '', self._url, re.I).rstrip('/') + f'/page/{n_page}'
+        logger.warning('Страница %s не найдена в DOM, пробую прямую навигацию: %s', n_page, fallback_url)
+        try:
+            self._chrome_remote.navigate(fallback_url, referer='https://google.com', timeout=120)
+            self._wait_requests_finished()
+            current_url = str(self._chrome_remote.execute_script('window.location.href') or '')
+            if f'/page/{n_page}' in current_url:
+                return n_page
+        except Exception as exc:  # noqa: BLE001
+            logger.warning('Прямая навигация на страницу %s не удалась: %s', n_page, exc)
+
         return None
 
     def _find_link_by_href(self, href: str) -> Optional[DOMNode]:
@@ -488,6 +499,12 @@ class MainParser:
 
             current_page_number = self._go_page(next_page_number)  # type: ignore
             if not current_page_number:
+                logger.warning(
+                    'Не удалось перейти на страницу %s, завершаю выдачу при %s/%s записей.',
+                    next_page_number,
+                    collected_records,
+                    self._options.max_records,
+                )
                 break  # Reached the end of the search results
             persist_checkpoint()
 
