@@ -549,6 +549,8 @@ def fetch_ads_from_listing(
     limit: int,
     rotator: ProxyRotator,
     base_headers: dict[str, str],
+    *,
+    attempts_per_page: int = 3,
 ) -> list[str]:
     ads: list[str] = []
     seen: set[str] = set()
@@ -556,7 +558,21 @@ def fetch_ads_from_listing(
 
     while len(ads) < limit:
         page_url = listing_url if page == 1 else f"{listing_url.rstrip('/')}/?page={page}"
-        result = rotator.request("GET", page_url, headers=base_headers)
+        last_error: Exception | None = None
+        result: ProxyResult | None = None
+        for attempt in range(max(1, attempts_per_page)):
+            try:
+                result = rotator.request("GET", page_url, headers=base_headers)
+                break
+            except RuntimeError as exc:
+                last_error = exc
+                if attempt + 1 >= attempts_per_page:
+                    raise
+                time.sleep(0.8 * (attempt + 1))
+        if result is None:
+            if last_error:
+                raise last_error
+            break
         page_ads = extract_listing_ad_urls(result.response.text)
         if not page_ads:
             break
@@ -572,6 +588,69 @@ def fetch_ads_from_listing(
         if added_on_page == 0:
             break
         page += 1
+
+    return ads[:limit]
+
+
+def fetch_ads_from_listing_selenium(
+    listing_url: str,
+    limit: int,
+    *,
+    browser: str,
+    timeout: float,
+    headless: bool,
+    chrome_binary: str,
+    chrome_user_data_dir: str,
+    chrome_profile_directory: str,
+    cookie: str,
+    cookie_base_file: str,
+) -> list[str]:
+    driver = None
+    ads: list[str] = []
+    seen: set[str] = set()
+    page = 1
+
+    try:
+        driver = build_driver(
+            browser,
+            DIRECT_PROXY,
+            timeout=timeout,
+            headless=headless,
+            chrome_binary=chrome_binary,
+            chrome_user_data_dir=chrome_user_data_dir,
+            chrome_profile_directory=chrome_profile_directory,
+        )
+        browser_cookies = load_browser_cookies(cookie_json_path(cookie_base_file))
+        inject_cookies(driver, cookie, browser_cookies)
+
+        while len(ads) < limit:
+            page_url = listing_url if page == 1 else f"{listing_url.rstrip('/')}/?page={page}"
+            if not safe_get(driver, page_url, timeout_override=max(timeout, 15.0)):
+                break
+            try:
+                WebDriverWait(driver, min(max(timeout, 4.0), 12.0)).until(
+                    lambda drv: bool(extract_listing_ad_urls(drv.page_source))
+                )
+            except TimeoutException:
+                pass
+            page_ads = extract_listing_ad_urls(driver.page_source)
+            if not page_ads:
+                break
+            added_on_page = 0
+            for url in page_ads:
+                if url in seen:
+                    continue
+                seen.add(url)
+                ads.append(url)
+                added_on_page += 1
+                if len(ads) >= limit:
+                    break
+            if added_on_page == 0:
+                break
+            page += 1
+    finally:
+        if driver is not None:
+            cleanup_driver(driver)
 
     return ads[:limit]
 
@@ -2819,7 +2898,24 @@ def main() -> int:
         ads.append(args.ad_url.strip())
     if not ads:
         listing_limit = args.listing_limit if args.listing_limit > 0 else prompt_listing_limit()
-        ads = fetch_ads_from_listing(args.listing_url, listing_limit, rotator, base_headers)
+        try:
+            ads = fetch_ads_from_listing(args.listing_url, listing_limit, rotator, base_headers)
+        except RuntimeError as exc:
+            if args.driver != "selenium":
+                raise
+            print(f"HTTP listing fetch failed, trying Selenium listing fallback: {exc}")
+            ads = fetch_ads_from_listing_selenium(
+                args.listing_url,
+                listing_limit,
+                browser=args.browser,
+                timeout=args.timeout,
+                headless=args.headless,
+                chrome_binary=chrome_binary,
+                chrome_user_data_dir=chrome_user_data_dir,
+                chrome_profile_directory=chrome_profile_directory,
+                cookie=cookie,
+                cookie_base_file=cookie_base_file,
+            )
         if not ads:
             raise ValueError(f"No ads found on listing page: {args.listing_url}")
         print(f"Collected {len(ads)} ads from listing page.")
