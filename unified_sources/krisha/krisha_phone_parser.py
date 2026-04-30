@@ -551,10 +551,12 @@ def fetch_ads_from_listing(
     base_headers: dict[str, str],
     *,
     attempts_per_page: int = 3,
+    empty_page_tolerance: int = 3,
 ) -> list[str]:
     ads: list[str] = []
     seen: set[str] = set()
     page = 1
+    consecutive_empty_pages = 0
 
     while len(ads) < limit:
         page_url = listing_url if page == 1 else f"{listing_url.rstrip('/')}/?page={page}"
@@ -575,7 +577,11 @@ def fetch_ads_from_listing(
             break
         page_ads = extract_listing_ad_urls(result.response.text)
         if not page_ads:
-            break
+            consecutive_empty_pages += 1
+            if consecutive_empty_pages >= empty_page_tolerance:
+                break
+            page += 1
+            continue
         added_on_page = 0
         for url in page_ads:
             if url in seen:
@@ -586,7 +592,11 @@ def fetch_ads_from_listing(
             if len(ads) >= limit:
                 break
         if added_on_page == 0:
-            break
+            consecutive_empty_pages += 1
+            if consecutive_empty_pages >= empty_page_tolerance:
+                break
+        else:
+            consecutive_empty_pages = 0
         page += 1
 
     return ads[:limit]
@@ -604,11 +614,13 @@ def fetch_ads_from_listing_selenium(
     chrome_profile_directory: str,
     cookie: str,
     cookie_base_file: str,
+    empty_page_tolerance: int = 3,
 ) -> list[str]:
     driver = None
     ads: list[str] = []
     seen: set[str] = set()
     page = 1
+    consecutive_empty_pages = 0
 
     try:
         driver = build_driver(
@@ -635,7 +647,11 @@ def fetch_ads_from_listing_selenium(
                 pass
             page_ads = extract_listing_ad_urls(driver.page_source)
             if not page_ads:
-                break
+                consecutive_empty_pages += 1
+                if consecutive_empty_pages >= empty_page_tolerance:
+                    break
+                page += 1
+                continue
             added_on_page = 0
             for url in page_ads:
                 if url in seen:
@@ -646,7 +662,11 @@ def fetch_ads_from_listing_selenium(
                 if len(ads) >= limit:
                     break
             if added_on_page == 0:
-                break
+                consecutive_empty_pages += 1
+                if consecutive_empty_pages >= empty_page_tolerance:
+                    break
+            else:
+                consecutive_empty_pages = 0
             page += 1
     finally:
         if driver is not None:
@@ -2898,8 +2918,16 @@ def main() -> int:
         ads.append(args.ad_url.strip())
     if not ads:
         listing_limit = args.listing_limit if args.listing_limit > 0 else prompt_listing_limit()
+        listing_timeout = min(args.timeout, 8.0)
+        listing_attempts = 1 if args.no_proxy else 3
         try:
-            ads = fetch_ads_from_listing(args.listing_url, listing_limit, rotator, base_headers)
+            ads = fetch_ads_from_listing(
+                args.listing_url,
+                listing_limit,
+                rotator,
+                base_headers,
+                attempts_per_page=listing_attempts,
+            )
         except RuntimeError as exc:
             if args.driver != "selenium":
                 raise
@@ -2908,7 +2936,7 @@ def main() -> int:
                 args.listing_url,
                 listing_limit,
                 browser=args.browser,
-                timeout=args.timeout,
+                timeout=listing_timeout,
                 headless=args.headless,
                 chrome_binary=chrome_binary,
                 chrome_user_data_dir=chrome_user_data_dir,

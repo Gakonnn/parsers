@@ -515,6 +515,8 @@ def collect_listing_urls(category_url: str, limit: int) -> list[str]:
     collected: list[str] = []
     seen: set[str] = set()
     page = 1
+    consecutive_empty_pages = 0
+    max_consecutive_empty_pages = 3
 
     while len(collected) < limit:
         page_url = build_page_url(category_url, page)
@@ -522,7 +524,11 @@ def collect_listing_urls(category_url: str, limit: int) -> list[str]:
         page_urls = extract_listing_urls_from_category(html)
         print(f"[category] page={page} url={page_url} links={len(page_urls)}")
         if not page_urls:
-            break
+            consecutive_empty_pages += 1
+            if consecutive_empty_pages >= max_consecutive_empty_pages:
+                break
+            page += 1
+            continue
 
         page_added = 0
         for url in page_urls:
@@ -535,7 +541,11 @@ def collect_listing_urls(category_url: str, limit: int) -> list[str]:
                 break
 
         if page_added == 0:
-            break
+            consecutive_empty_pages += 1
+            if consecutive_empty_pages >= max_consecutive_empty_pages:
+                break
+        else:
+            consecutive_empty_pages = 0
         page += 1
 
     return collected[:limit]
