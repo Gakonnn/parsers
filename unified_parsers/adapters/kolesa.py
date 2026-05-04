@@ -37,6 +37,10 @@ class KolesaAdapter(SourceAdapter):
         parser.add_argument("--idfa", default="", help="Optional Kolesa mobile idfa header")
         parser.add_argument("--phone-id", default="", help="Optional Kolesa mobile X-PHONE-ID header")
         parser.add_argument("--app-location", default="", help="Optional Kolesa mobile app-location header")
+        parser.add_argument("--sessions-json", default="", help="JSON list with Kolesa mobile sessions")
+        parser.add_argument("--sessions-file", default="", help="Path to JSON file with Kolesa mobile sessions")
+        parser.add_argument("--session-cooldown-sec", type=float, default=900.0, help="Cooldown after Kolesa captcha/auth")
+        parser.add_argument("--phone-max-session-attempts", type=int, default=20, help="Max Kolesa session attempts per phone")
         parser.add_argument("--cookie", default="", help="Cookie header string")
         parser.add_argument("--cookie-file", default="", help="Path to file with cookie header")
         parser.add_argument("--verify-ssl", dest="verify_ssl", action="store_true", help="Verify Kolesa SSL certificates")
@@ -107,6 +111,14 @@ class KolesaAdapter(SourceAdapter):
         app_location = str(args.app_location).strip()
         if app_location:
             command.extend(["--app-location", app_location])
+        sessions_json = str(args.sessions_json).strip()
+        if sessions_json:
+            command.extend(["--sessions-json", sessions_json])
+        sessions_file = str(args.sessions_file).strip()
+        if sessions_file:
+            command.extend(["--sessions-file", sessions_file])
+        command.extend(["--session-cooldown-sec", str(args.session_cooldown_sec)])
+        command.extend(["--phone-max-session-attempts", str(args.phone_max_session_attempts)])
         if args.no_proxy:
             command.append("--no-proxy")
         else:

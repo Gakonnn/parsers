@@ -74,6 +74,9 @@ DEFAULT_PHONE_ID = os.environ.get("KOLESA_PHONE_ID", "")
 DEFAULT_APP_LOCATION = os.environ.get("KOLESA_APP_LOCATION", "")
 DEFAULT_APP_VERSION = os.environ.get("KOLESA_APP_VERSION", "26.4.18")
 DEFAULT_APP_PLATFORM_VERSION = os.environ.get("KOLESA_APP_PLATFORM_VERSION", "17.2.1")
+DEFAULT_SESSIONS_JSON = os.environ.get("KOLESA_SESSIONS_JSON", "")
+DEFAULT_SESSIONS_FILE = os.environ.get("KOLESA_SESSIONS_FILE", "")
+DEFAULT_SESSION_COOLDOWN_SEC = float(os.environ.get("KOLESA_SESSION_COOLDOWN_SEC", "900") or 900)
 DIRECT_PROXY = "__DIRECT__"
 CHECKPOINT_SUFFIX = ".checkpoint.json"
 
@@ -130,6 +133,29 @@ class HttpResponse:
 class ProxyResult:
     response: HttpResponse
     proxy: str
+
+
+@dataclass
+class KolesaSession:
+    name: str
+    app_id: str
+    app_key: str
+    current_user: str
+    captcha_token: str = ""
+    auth_token: str = ""
+    cookie: str = ""
+    idfa: str = ""
+    phone_id: str = ""
+    app_location: str = ""
+    app_version: str = DEFAULT_APP_VERSION
+    app_platform_version: str = DEFAULT_APP_PLATFORM_VERSION
+    unavailable_until: float = 0.0
+    captcha_hits: int = 0
+    auth_hits: int = 0
+
+    @property
+    def label(self) -> str:
+        return self.name or "kolesa-session"
 
 
 class ProxyRotator:
@@ -344,6 +370,69 @@ def load_cookie_header(raw_cookie: str, cookie_file: str) -> str:
     return cookie
 
 
+def load_kolesa_sessions(args: argparse.Namespace) -> list[KolesaSession]:
+    def clean(value: Any) -> str:
+        return str(value or "").strip()
+
+    def build_session(item: dict[str, Any], index: int) -> KolesaSession:
+        return KolesaSession(
+            name=clean(item.get("name")) or f"session-{index + 1}",
+            app_id=clean(item.get("app_id") or item.get("appId")) or args.app_id.strip(),
+            app_key=clean(item.get("app_key") or item.get("appKey")) or args.app_key.strip(),
+            current_user=clean(item.get("current_user") or item.get("currentUser")) or args.current_user.strip(),
+            captcha_token=clean(item.get("captcha_token") or item.get("captchaToken")) or args.captcha_token.strip(),
+            auth_token=clean(item.get("auth_token") or item.get("authToken") or item.get("x_auth_token")),
+            cookie=clean(item.get("cookie") or item.get("cookies")),
+            idfa=clean(item.get("idfa")),
+            phone_id=clean(item.get("phone_id") or item.get("phoneId") or item.get("x_phone_id")),
+            app_location=clean(item.get("app_location") or item.get("appLocation")),
+            app_version=clean(item.get("app_version") or item.get("appVersion")) or args.app_version.strip() or DEFAULT_APP_VERSION,
+            app_platform_version=(
+                clean(item.get("app_platform_version") or item.get("appPlatformVersion"))
+                or args.app_platform_version.strip()
+                or DEFAULT_APP_PLATFORM_VERSION
+            ),
+        )
+
+    raw_sessions = args.sessions_json.strip() or DEFAULT_SESSIONS_JSON.strip()
+    sessions_path = args.sessions_file.strip() or DEFAULT_SESSIONS_FILE.strip()
+    if not raw_sessions and sessions_path and Path(sessions_path).exists():
+        raw_sessions = Path(sessions_path).read_text(encoding="utf-8")
+
+    sessions: list[KolesaSession] = []
+    if raw_sessions:
+        try:
+            payload = json.loads(raw_sessions)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Invalid Kolesa sessions JSON: {exc}") from exc
+        if isinstance(payload, dict):
+            payload = payload.get("sessions", [])
+        if not isinstance(payload, list):
+            raise ValueError("Kolesa sessions JSON must be a list or an object with sessions list")
+        for index, item in enumerate(payload):
+            if isinstance(item, dict):
+                sessions.append(build_session(item, index))
+
+    if not sessions:
+        sessions.append(
+            KolesaSession(
+                name="env-session",
+                app_id=args.app_id.strip(),
+                app_key=args.app_key.strip(),
+                current_user=args.current_user.strip(),
+                captcha_token=args.captcha_token.strip(),
+                auth_token=args.auth_token.strip(),
+                cookie=load_cookie_header(args.cookie, args.cookie_file),
+                idfa=args.idfa.strip(),
+                phone_id=args.phone_id.strip(),
+                app_location=args.app_location.strip(),
+                app_version=args.app_version.strip() or DEFAULT_APP_VERSION,
+                app_platform_version=args.app_platform_version.strip() or DEFAULT_APP_PLATFORM_VERSION,
+            )
+        )
+    return sessions
+
+
 def build_headers(cookie: str = "") -> dict[str, str]:
     headers = dict(DEFAULT_HEADERS)
     if cookie:
@@ -351,31 +440,31 @@ def build_headers(cookie: str = "") -> dict[str, str]:
     return headers
 
 
-def build_phone_api_headers(base_headers: dict[str, str], ad_url: str, args: argparse.Namespace) -> dict[str, str]:
-    if args.auth_token.strip():
+def build_phone_api_headers(base_headers: dict[str, str], ad_url: str, session: KolesaSession) -> dict[str, str]:
+    if session.auth_token.strip():
         headers = {
             "Accept": "*/*",
-            "app-version": args.app_version.strip() or DEFAULT_APP_VERSION,
+            "app-version": session.app_version.strip() or DEFAULT_APP_VERSION,
             "app-language": "ru",
             "app-platform": "ios",
             "APP-PHOTO-FORMAT": "webp",
             "Accept-Language": "ru-KZ;q=1.0, kk-KZ;q=0.9",
             "X-APP-SCREEN-COEFFICIENT": "2.0",
             "app-push-enable": "false",
-            "X-AUTH-TOKEN": args.auth_token.strip(),
-            "app-platform-version": args.app_platform_version.strip() or DEFAULT_APP_PLATFORM_VERSION,
+            "X-AUTH-TOKEN": session.auth_token.strip(),
+            "app-platform-version": session.app_platform_version.strip() or DEFAULT_APP_PLATFORM_VERSION,
             "User-Agent": (
-                f"KolesaKz/{args.app_version.strip() or DEFAULT_APP_VERSION} "
-                f"(kz.kolesa.advapp; build:2; iOS {args.app_platform_version.strip() or DEFAULT_APP_PLATFORM_VERSION}) "
+                f"KolesaKz/{session.app_version.strip() or DEFAULT_APP_VERSION} "
+                f"(kz.kolesa.advapp; build:2; iOS {session.app_platform_version.strip() or DEFAULT_APP_PLATFORM_VERSION}) "
                 "Alamofire/5.9.1"
             ),
         }
-        if args.idfa.strip():
-            headers["idfa"] = args.idfa.strip()
-        if args.phone_id.strip():
-            headers["X-PHONE-ID"] = args.phone_id.strip()
-        if args.app_location.strip():
-            headers["app-location"] = args.app_location.strip()
+        if session.idfa.strip():
+            headers["idfa"] = session.idfa.strip()
+        if session.phone_id.strip():
+            headers["X-PHONE-ID"] = session.phone_id.strip()
+        if session.app_location.strip():
+            headers["app-location"] = session.app_location.strip()
     else:
         headers = dict(API_HEADERS)
 
@@ -383,6 +472,44 @@ def build_phone_api_headers(base_headers: dict[str, str], ad_url: str, args: arg
         headers["Cookie"] = base_headers["Cookie"]
     headers["Referer"] = ad_url
     return headers
+
+
+class KolesaSessionManager:
+    def __init__(self, sessions: list[KolesaSession], *, cooldown_sec: float) -> None:
+        self.sessions = sessions or []
+        self.cooldown_sec = max(0.0, cooldown_sec)
+        self.current_index = 0
+
+    def active_count(self) -> int:
+        now = time.time()
+        return sum(1 for session in self.sessions if session.unavailable_until <= now)
+
+    def next_session(self) -> KolesaSession | None:
+        if not self.sessions:
+            return None
+        now = time.time()
+        for step in range(len(self.sessions)):
+            idx = (self.current_index + step) % len(self.sessions)
+            session = self.sessions[idx]
+            if session.unavailable_until <= now:
+                self.current_index = (idx + 1) % len(self.sessions)
+                return session
+        return None
+
+    def mark_captcha(self, session: KolesaSession) -> None:
+        session.captcha_hits += 1
+        session.unavailable_until = time.time() + self.cooldown_sec
+        print(f"  -> kolesa session cooldown: {session.label}, reason=captcha_required, cooldown={int(self.cooldown_sec)}s")
+
+    def mark_auth_required(self, session: KolesaSession) -> None:
+        session.auth_hits += 1
+        session.unavailable_until = time.time() + self.cooldown_sec
+        print(f"  -> kolesa session cooldown: {session.label}, reason=auth_required, cooldown={int(self.cooldown_sec)}s")
+
+    def base_headers_for(self, session: KolesaSession | None = None) -> dict[str, str]:
+        if session is None:
+            session = self.sessions[0] if self.sessions else None
+        return build_headers(session.cookie if session else "")
 
 
 def checkpoint_path_for_output(output_path: Path, explicit_path: str = "") -> Path:
@@ -791,13 +918,9 @@ def fetch_ad_metadata(ad_url: str, rotator: ProxyRotator, base_headers: dict[str
 def fetch_phone_for_ad(
     ad_url: str,
     rotator: ProxyRotator,
-    base_headers: dict[str, str],
     *,
-    app_id: str,
-    app_key: str,
-    current_user: str,
-    captcha_token: str,
-    phone_api_args: argparse.Namespace,
+    session_manager: KolesaSessionManager,
+    max_session_attempts: int,
 ) -> dict[str, str]:
     ad_id = parse_ad_id(ad_url)
     if not ad_id:
@@ -811,77 +934,116 @@ def fetch_phone_for_ad(
             "error": "Cannot parse ad id from url",
         }
 
-    metadata = fetch_ad_metadata(ad_url, rotator, base_headers)
+    first_session = session_manager.next_session()
+    if first_session is None:
+        return {
+            "ad_url": ad_url,
+            "ad_id": ad_id,
+            **empty_metadata(),
+            "phones": "",
+            "status": "retry_later",
+            "proxy": "",
+            "error": "All Kolesa sessions are in cooldown",
+        }
+
+    metadata = fetch_ad_metadata(ad_url, rotator, session_manager.base_headers_for(first_session))
 
     api_url = f"https://app.kolesa.kz/adverts/{ad_id}/phones"
-    headers = build_phone_api_headers(base_headers, ad_url, phone_api_args)
-    try:
-        result = rotator.request(
-            "GET",
-            api_url,
-            headers=headers,
-            params={
-                "appId": app_id,
-                "appKey": app_key,
-                "captchaToken": captcha_token,
-                "currentUser": current_user,
-            },
-            ok_statuses={200},
-        )
-        payload = result.response.json()
-        phones = extract_phones(payload)
-        condition = detect_api_condition(payload)
+    attempts = max(1, min(max_session_attempts, max(1, len(session_manager.sessions))))
+    last_row: dict[str, str] | None = None
+    session = first_session
+    for attempt in range(1, attempts + 1):
+        if session is None:
+            break
+        base_headers = session_manager.base_headers_for(session)
+        headers = build_phone_api_headers(base_headers, ad_url, session)
+        try:
+            result = rotator.request(
+                "GET",
+                api_url,
+                headers=headers,
+                params={
+                    "appId": session.app_id,
+                    "appKey": session.app_key,
+                    "captchaToken": session.captcha_token,
+                    "currentUser": session.current_user,
+                },
+                ok_statuses={200},
+            )
+            payload = result.response.json()
+            phones = extract_phones(payload)
+            condition = detect_api_condition(payload)
 
-        if condition == "auth_required":
+            if condition == "auth_required":
+                session_manager.mark_auth_required(session)
+                last_row = {
+                    "ad_url": ad_url,
+                    "ad_id": ad_id,
+                    **metadata,
+                    "phones": "",
+                    "status": "auth_required",
+                    "proxy": result.proxy,
+                    "error": "Authorization is required by kolesa.kz for this phone",
+                }
+                session = session_manager.next_session()
+                continue
+            if condition == "captcha_required":
+                session_manager.mark_captcha(session)
+                last_row = {
+                    "ad_url": ad_url,
+                    "ad_id": ad_id,
+                    **metadata,
+                    "phones": "",
+                    "status": "captcha_required",
+                    "proxy": result.proxy,
+                    "error": "CAPTCHA token is required by kolesa.kz for this phone",
+                }
+                session = session_manager.next_session()
+                continue
+            if condition and condition not in {"success", "ok"}:
+                return {
+                    "ad_url": ad_url,
+                    "ad_id": ad_id,
+                    **metadata,
+                    "phones": "",
+                    "status": "error",
+                    "proxy": result.proxy,
+                    "error": f"Kolesa API status: {condition}",
+                }
+
             return {
                 "ad_url": ad_url,
                 "ad_id": ad_id,
                 **metadata,
-                "phones": "",
-                "status": "auth_required",
+                "phones": ";".join(phones),
+                "status": "ok" if phones else "no_phone",
                 "proxy": result.proxy,
-                "error": "Authorization is required by kolesa.kz for this phone",
+                "error": "",
             }
-        if condition == "captcha_required":
-            return {
-                "ad_url": ad_url,
-                "ad_id": ad_id,
-                **metadata,
-                "phones": "",
-                "status": "captcha_required",
-                "proxy": result.proxy,
-                "error": "CAPTCHA token is required by kolesa.kz for this phone",
-            }
-        if condition and condition not in {"success", "ok"}:
+        except Exception as exc:  # noqa: BLE001
             return {
                 "ad_url": ad_url,
                 "ad_id": ad_id,
                 **metadata,
                 "phones": "",
                 "status": "error",
-                "proxy": result.proxy,
-                "error": f"Kolesa API status: {condition}",
+                "proxy": "",
+                "error": str(exc),
             }
 
-        return {
-            "ad_url": ad_url,
-            "ad_id": ad_id,
-            **metadata,
-            "phones": ";".join(phones),
-            "status": "ok" if phones else "no_phone",
-            "proxy": result.proxy,
-            "error": "",
-        }
-    except Exception as exc:  # noqa: BLE001
-        return {
-            "ad_url": ad_url,
-            "ad_id": ad_id,
-            **metadata,
-            "phones": "",
-            "status": "error",
-            "proxy": "",
-            "error": str(exc),
-        }
+    if last_row:
+        last_row["status"] = "retry_later" if last_row.get("status") in {"captcha_required", "auth_required"} else last_row.get("status", "error")
+        last_row["error"] = f"{last_row.get('error', 'Kolesa session unavailable')}; all available sessions are in cooldown"
+        return last_row
+    return {
+        "ad_url": ad_url,
+        "ad_id": ad_id,
+        **metadata,
+        "phones": "",
+        "status": "retry_later",
+        "proxy": "",
+        "error": "All Kolesa sessions are in cooldown",
+    }
 
 
 def save_csv(rows: list[dict[str, str]], out_path: Path) -> None:
@@ -930,6 +1092,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--app-location", default=DEFAULT_APP_LOCATION, help="Optional Kolesa mobile app-location header")
     parser.add_argument("--app-version", default=DEFAULT_APP_VERSION, help="Kolesa mobile app-version header")
     parser.add_argument("--app-platform-version", default=DEFAULT_APP_PLATFORM_VERSION, help="Kolesa mobile app-platform-version header")
+    parser.add_argument("--sessions-json", default=DEFAULT_SESSIONS_JSON, help="JSON list with Kolesa mobile sessions")
+    parser.add_argument("--sessions-file", default=DEFAULT_SESSIONS_FILE, help="Path to JSON file with Kolesa mobile sessions")
+    parser.add_argument("--session-cooldown-sec", type=float, default=DEFAULT_SESSION_COOLDOWN_SEC, help="Cooldown for a Kolesa session after captcha/auth")
+    parser.add_argument("--phone-max-session-attempts", type=int, default=20, help="Max session rotation attempts per advert phone")
     parser.add_argument(
         "--verify-ssl",
         dest="verify_ssl",
@@ -974,8 +1140,10 @@ def main() -> int:
         blocked_proxies=blocked_proxies,
         verify_ssl=bool(args.verify_ssl),
     )
-    cookie = load_cookie_header(args.cookie, args.cookie_file)
-    base_headers = build_headers(cookie)
+    sessions = load_kolesa_sessions(args)
+    session_manager = KolesaSessionManager(sessions, cooldown_sec=float(args.session_cooldown_sec))
+    base_headers = session_manager.base_headers_for()
+    print(f"[kolesa] mobile sessions loaded: {len(sessions)}, active={session_manager.active_count()}")
     listing_url = normalize_listing_url(args.listing_url)
     rows: list[dict[str, str]] = []
     resume_state = load_checkpoint(checkpoint_path)
@@ -1020,12 +1188,8 @@ def main() -> int:
             row = fetch_phone_for_ad(
                 ad_url,
                 rotator,
-                base_headers,
-                app_id=args.app_id.strip(),
-                app_key=args.app_key.strip(),
-                current_user=args.current_user.strip(),
-                captcha_token=args.captcha_token.strip(),
-                phone_api_args=args,
+                session_manager=session_manager,
+                max_session_attempts=max(1, int(args.phone_max_session_attempts)),
             )
             rows.append(row)
             if live_db_writer:
@@ -1078,7 +1242,7 @@ def main() -> int:
 
     if live_db_writer:
         skipped = sum(1 for row in rows if row.get("status") == "skipped")
-        errors = sum(1 for row in rows if row.get("status") in {"error", "captcha_required", "auth_required"})
+        errors = sum(1 for row in rows if row.get("status") in {"error", "captcha_required", "auth_required", "retry_later"})
         live_db_writer.finish(
             status="completed",
             skipped=skipped,
