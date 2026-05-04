@@ -68,6 +68,12 @@ DEFAULT_CURRENT_USER = os.environ.get("KOLESA_PHONE_CURRENT_USER", "20822821@aut
 DEFAULT_CAPTCHA_TOKEN = os.environ.get("KOLESA_PHONE_CAPTCHA_TOKEN", "")
 DEFAULT_COOKIE = os.environ.get("KOLESA_COOKIE", "")
 DEFAULT_COOKIE_FILE = os.environ.get("KOLESA_COOKIE_FILE", "")
+DEFAULT_AUTH_TOKEN = os.environ.get("KOLESA_AUTH_TOKEN", os.environ.get("KOLESA_PHONE_AUTH_TOKEN", ""))
+DEFAULT_IDFA = os.environ.get("KOLESA_IDFA", "")
+DEFAULT_PHONE_ID = os.environ.get("KOLESA_PHONE_ID", "")
+DEFAULT_APP_LOCATION = os.environ.get("KOLESA_APP_LOCATION", "")
+DEFAULT_APP_VERSION = os.environ.get("KOLESA_APP_VERSION", "26.4.18")
+DEFAULT_APP_PLATFORM_VERSION = os.environ.get("KOLESA_APP_PLATFORM_VERSION", "17.2.1")
 DIRECT_PROXY = "__DIRECT__"
 CHECKPOINT_SUFFIX = ".checkpoint.json"
 
@@ -345,6 +351,40 @@ def build_headers(cookie: str = "") -> dict[str, str]:
     return headers
 
 
+def build_phone_api_headers(base_headers: dict[str, str], ad_url: str, args: argparse.Namespace) -> dict[str, str]:
+    if args.auth_token.strip():
+        headers = {
+            "Accept": "*/*",
+            "app-version": args.app_version.strip() or DEFAULT_APP_VERSION,
+            "app-language": "ru",
+            "app-platform": "ios",
+            "APP-PHOTO-FORMAT": "webp",
+            "Accept-Language": "ru-KZ;q=1.0, kk-KZ;q=0.9",
+            "X-APP-SCREEN-COEFFICIENT": "2.0",
+            "app-push-enable": "false",
+            "X-AUTH-TOKEN": args.auth_token.strip(),
+            "app-platform-version": args.app_platform_version.strip() or DEFAULT_APP_PLATFORM_VERSION,
+            "User-Agent": (
+                f"KolesaKz/{args.app_version.strip() or DEFAULT_APP_VERSION} "
+                f"(kz.kolesa.advapp; build:2; iOS {args.app_platform_version.strip() or DEFAULT_APP_PLATFORM_VERSION}) "
+                "Alamofire/5.9.1"
+            ),
+        }
+        if args.idfa.strip():
+            headers["idfa"] = args.idfa.strip()
+        if args.phone_id.strip():
+            headers["X-PHONE-ID"] = args.phone_id.strip()
+        if args.app_location.strip():
+            headers["app-location"] = args.app_location.strip()
+    else:
+        headers = dict(API_HEADERS)
+
+    if base_headers.get("Cookie"):
+        headers["Cookie"] = base_headers["Cookie"]
+    headers["Referer"] = ad_url
+    return headers
+
+
 def checkpoint_path_for_output(output_path: Path, explicit_path: str = "") -> Path:
     if explicit_path.strip():
         return Path(explicit_path).expanduser().resolve()
@@ -608,14 +648,22 @@ def extract_phones(payload: Any) -> list[str]:
 def detect_api_condition(payload: Any) -> str | None:
     if not isinstance(payload, dict):
         return None
-    text = json.dumps(payload, ensure_ascii=False).lower()
-    if payload.get("isAuthRequired") is True or "auth" in text and "required" in text:
+    if payload.get("isAuthRequired") is True:
         return "auth_required"
-    if payload.get("captchaRequired") is True or "captcha" in text and "required" in text:
+    if payload.get("captchaRequired") is True:
         return "captcha_required"
     status = str(payload.get("status", "")).lower()
     if status and status not in {"success", "ok"}:
         return status
+    diagnostic_text = " ".join(
+        strip_html(payload.get(key, ""))
+        for key in ("error", "message", "reason", "description")
+        if payload.get(key)
+    ).lower()
+    if "auth" in diagnostic_text and "required" in diagnostic_text:
+        return "auth_required"
+    if "captcha" in diagnostic_text and "required" in diagnostic_text:
+        return "captcha_required"
     return None
 
 
@@ -749,6 +797,7 @@ def fetch_phone_for_ad(
     app_key: str,
     current_user: str,
     captcha_token: str,
+    phone_api_args: argparse.Namespace,
 ) -> dict[str, str]:
     ad_id = parse_ad_id(ad_url)
     if not ad_id:
@@ -765,10 +814,7 @@ def fetch_phone_for_ad(
     metadata = fetch_ad_metadata(ad_url, rotator, base_headers)
 
     api_url = f"https://app.kolesa.kz/adverts/{ad_id}/phones"
-    headers = dict(API_HEADERS)
-    if base_headers.get("Cookie"):
-        headers["Cookie"] = base_headers["Cookie"]
-    headers["Referer"] = ad_url
+    headers = build_phone_api_headers(base_headers, ad_url, phone_api_args)
     try:
         result = rotator.request(
             "GET",
@@ -878,6 +924,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--app-key", default=DEFAULT_APP_KEY, help="Kolesa phones API appKey")
     parser.add_argument("--current-user", default=DEFAULT_CURRENT_USER, help="Kolesa phones API currentUser")
     parser.add_argument("--captcha-token", default=DEFAULT_CAPTCHA_TOKEN, help="Optional captchaToken for phones API")
+    parser.add_argument("--auth-token", default=DEFAULT_AUTH_TOKEN, help="Optional Kolesa mobile X-AUTH-TOKEN")
+    parser.add_argument("--idfa", default=DEFAULT_IDFA, help="Optional Kolesa mobile idfa header")
+    parser.add_argument("--phone-id", default=DEFAULT_PHONE_ID, help="Optional Kolesa mobile X-PHONE-ID header")
+    parser.add_argument("--app-location", default=DEFAULT_APP_LOCATION, help="Optional Kolesa mobile app-location header")
+    parser.add_argument("--app-version", default=DEFAULT_APP_VERSION, help="Kolesa mobile app-version header")
+    parser.add_argument("--app-platform-version", default=DEFAULT_APP_PLATFORM_VERSION, help="Kolesa mobile app-platform-version header")
     parser.add_argument(
         "--verify-ssl",
         dest="verify_ssl",
@@ -973,6 +1025,7 @@ def main() -> int:
                 app_key=args.app_key.strip(),
                 current_user=args.current_user.strip(),
                 captcha_token=args.captcha_token.strip(),
+                phone_api_args=args,
             )
             rows.append(row)
             if live_db_writer:

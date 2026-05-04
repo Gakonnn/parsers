@@ -33,6 +33,10 @@ class KolesaAdapter(SourceAdapter):
         parser.add_argument("--app-key", default="", help="Kolesa phones API appKey")
         parser.add_argument("--current-user", default="", help="Kolesa phones API currentUser")
         parser.add_argument("--captcha-token", default="", help="Optional captchaToken")
+        parser.add_argument("--auth-token", default="", help="Optional Kolesa mobile X-AUTH-TOKEN")
+        parser.add_argument("--idfa", default="", help="Optional Kolesa mobile idfa header")
+        parser.add_argument("--phone-id", default="", help="Optional Kolesa mobile X-PHONE-ID header")
+        parser.add_argument("--app-location", default="", help="Optional Kolesa mobile app-location header")
         parser.add_argument("--cookie", default="", help="Cookie header string")
         parser.add_argument("--cookie-file", default="", help="Path to file with cookie header")
         parser.add_argument("--verify-ssl", dest="verify_ssl", action="store_true", help="Verify Kolesa SSL certificates")
@@ -91,6 +95,18 @@ class KolesaAdapter(SourceAdapter):
         captcha_token = str(args.captcha_token).strip()
         if captcha_token:
             command.extend(["--captcha-token", captcha_token])
+        auth_token = str(args.auth_token).strip()
+        if auth_token:
+            command.extend(["--auth-token", auth_token])
+        idfa = str(args.idfa).strip()
+        if idfa:
+            command.extend(["--idfa", idfa])
+        phone_id = str(args.phone_id).strip()
+        if phone_id:
+            command.extend(["--phone-id", phone_id])
+        app_location = str(args.app_location).strip()
+        if app_location:
+            command.extend(["--app-location", app_location])
         if args.no_proxy:
             command.append("--no-proxy")
         else:
