@@ -74,6 +74,7 @@ DEFAULT_PHONE_ID = os.environ.get("KOLESA_PHONE_ID", "")
 DEFAULT_APP_LOCATION = os.environ.get("KOLESA_APP_LOCATION", "")
 DEFAULT_APP_VERSION = os.environ.get("KOLESA_APP_VERSION", "26.4.18")
 DEFAULT_APP_PLATFORM_VERSION = os.environ.get("KOLESA_APP_PLATFORM_VERSION", "17.2.1")
+DEFAULT_APP_PUSH_ENABLE = os.environ.get("KOLESA_APP_PUSH_ENABLE", "false")
 DEFAULT_SESSIONS_JSON = os.environ.get("KOLESA_SESSIONS_JSON", "")
 DEFAULT_SESSIONS_FILE = os.environ.get("KOLESA_SESSIONS_FILE", "")
 DEFAULT_SESSION_COOLDOWN_SEC = float(os.environ.get("KOLESA_SESSION_COOLDOWN_SEC", "900") or 900)
@@ -149,6 +150,7 @@ class KolesaSession:
     app_location: str = ""
     app_version: str = DEFAULT_APP_VERSION
     app_platform_version: str = DEFAULT_APP_PLATFORM_VERSION
+    app_push_enable: str = DEFAULT_APP_PUSH_ENABLE
     unavailable_until: float = 0.0
     captcha_hits: int = 0
     auth_hits: int = 0
@@ -392,6 +394,7 @@ def load_kolesa_sessions(args: argparse.Namespace) -> list[KolesaSession]:
                 or args.app_platform_version.strip()
                 or DEFAULT_APP_PLATFORM_VERSION
             ),
+            app_push_enable=clean(item.get("app_push_enable") or item.get("appPushEnable")) or args.app_push_enable.strip() or DEFAULT_APP_PUSH_ENABLE,
         )
 
     raw_sessions = args.sessions_json.strip() or DEFAULT_SESSIONS_JSON.strip()
@@ -428,6 +431,7 @@ def load_kolesa_sessions(args: argparse.Namespace) -> list[KolesaSession]:
                 app_location=args.app_location.strip(),
                 app_version=args.app_version.strip() or DEFAULT_APP_VERSION,
                 app_platform_version=args.app_platform_version.strip() or DEFAULT_APP_PLATFORM_VERSION,
+                app_push_enable=args.app_push_enable.strip() or DEFAULT_APP_PUSH_ENABLE,
             )
         )
     return sessions
@@ -450,7 +454,7 @@ def build_phone_api_headers(base_headers: dict[str, str], ad_url: str, session: 
             "APP-PHOTO-FORMAT": "webp",
             "Accept-Language": "ru-KZ;q=1.0, kk-KZ;q=0.9",
             "X-APP-SCREEN-COEFFICIENT": "2.0",
-            "app-push-enable": "false",
+            "app-push-enable": session.app_push_enable.strip() or DEFAULT_APP_PUSH_ENABLE,
             "X-AUTH-TOKEN": session.auth_token.strip(),
             "app-platform-version": session.app_platform_version.strip() or DEFAULT_APP_PLATFORM_VERSION,
             "User-Agent": (
@@ -1092,6 +1096,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--app-location", default=DEFAULT_APP_LOCATION, help="Optional Kolesa mobile app-location header")
     parser.add_argument("--app-version", default=DEFAULT_APP_VERSION, help="Kolesa mobile app-version header")
     parser.add_argument("--app-platform-version", default=DEFAULT_APP_PLATFORM_VERSION, help="Kolesa mobile app-platform-version header")
+    parser.add_argument("--app-push-enable", default=DEFAULT_APP_PUSH_ENABLE, help="Kolesa mobile app-push-enable header")
     parser.add_argument("--sessions-json", default=DEFAULT_SESSIONS_JSON, help="JSON list with Kolesa mobile sessions")
     parser.add_argument("--sessions-file", default=DEFAULT_SESSIONS_FILE, help="Path to JSON file with Kolesa mobile sessions")
     parser.add_argument("--session-cooldown-sec", type=float, default=DEFAULT_SESSION_COOLDOWN_SEC, help="Cooldown for a Kolesa session after captcha/auth")
