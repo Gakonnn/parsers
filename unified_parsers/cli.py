@@ -20,7 +20,7 @@ def _project_root() -> Path:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="unified_parsers",
-        description="Unified entry point for OLX, Krisha, and 2GIS parsers.",
+        description="Unified entry point for OLX, Krisha, Kolesa, and 2GIS parsers.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -101,7 +101,7 @@ def handle_run(args: argparse.Namespace) -> int:
     env["PYTHONUNBUFFERED"] = "1"
     output_target = str(getattr(args, "output_target", "file")).strip().lower()
     database_url = str(getattr(args, "database_url", "")).strip() or os.environ.get("DATABASE_URL", "").strip()
-    live_db_supported_sources = {"krisha"}
+    live_db_supported_sources = {"krisha", "kolesa"}
     two_gis_live_db_enabled = os.environ.get("PARSERS_2GIS_LIVE_DB", "true").strip().lower() in {
         "1",
         "true",

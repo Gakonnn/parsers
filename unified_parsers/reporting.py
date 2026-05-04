@@ -82,7 +82,7 @@ def refine_metrics_from_output(
         return processed, skipped, errors
 
     source_key = source.lower().strip()
-    if source_key == "krisha":
+    if source_key in {"krisha", "kolesa"}:
         return _refine_krisha_from_csv(output_path, processed, skipped, errors, exit_code)
 
     row_count = _count_rows_generic(output_path)

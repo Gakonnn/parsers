@@ -54,6 +54,8 @@
   - `/Users/gakon/PycharmProjects/olx/olx_scraper.py`
 - `krisha`:
   - `/Users/gakon/PycharmProjects/olx/unified_sources/krisha/krisha_phone_parser.py`
+- `kolesa`:
+  - `/Users/gakon/PycharmProjects/olx/unified_sources/kolesa/kolesa_phone_parser.py`
 - `2gis`:
   - `/Users/gakon/PycharmProjects/olx/unified_sources/2gis/parser-2gis.py`
 
@@ -79,6 +81,12 @@
 
 ```bash
 ./venv/bin/python parser_hub.py run krisha --listing-limit 10 --delay 0.7 --random-delay-min 1.2 --random-delay-max 3.5 --no-proxy --no-headless --output result_random.csv
+```
+
+Запустить Kolesa через unified CLI:
+
+```bash
+./venv/bin/python parser_hub.py run kolesa --listing-url "https://kolesa.kz/cars/" --listing-limit 10 --no-proxy --output kolesa_results.csv
 ```
 
 Единый run-report для любого источника:
@@ -113,6 +121,7 @@ DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/parsers" \
 
 - `olx`: `processed` считается по строкам в итоговом `xlsx`
 - `krisha`: `processed` считается по строкам `csv`, `skipped/errors` уточняются по колонкам `status/error`
+- `kolesa`: `processed` считается по строкам `csv`, `skipped/errors` уточняются по колонкам `status/error`
 - `2gis`: `processed` считается по строкам итогового файла (`xlsx/csv/json`)
 - для режима `db` создаются таблицы `parser_runs` и `parser_records` (автоматически при первом запуске)
 
@@ -120,6 +129,7 @@ DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/parsers" \
 
 - `olx` - готов к запуску из unified CLI
 - `krisha` - готов к запуску из unified CLI
+- `kolesa` - готов к запуску из unified CLI
 - `2gis` - готов к запуску из unified CLI
 
 ## Unified Dependencies

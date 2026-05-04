@@ -77,7 +77,7 @@ def load_records(*, source: str, output_path: Path) -> list[dict[str, Any]]:
     source_key = source.lower().strip()
     if source_key == "olx":
         return _read_xlsx_rows(output_path)
-    if source_key == "krisha":
+    if source_key in {"krisha", "kolesa"}:
         return _read_csv_rows(output_path)
     if source_key == "2gis":
         if output_path.suffix.lower() == ".json":
@@ -125,7 +125,7 @@ def _extract_external_id(source: str, row: dict[str, Any]) -> str:
     source_key = source.lower().strip()
     if source_key == "olx":
         return str(row.get("id", "")).strip()
-    if source_key == "krisha":
+    if source_key in {"krisha", "kolesa"}:
         return str(row.get("ad_id", "")).strip()
     if source_key == "2gis":
         return str(row.get("2GIS URL", "") or row.get("Наименование", "")).strip()

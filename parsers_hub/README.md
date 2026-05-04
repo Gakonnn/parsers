@@ -1,10 +1,11 @@
 # Parsers Hub
 
-Локальный веб-интерфейс для управления тремя парсерами:
+Локальный веб-интерфейс для управления парсерами:
 
 - `OLX`
 - `2GIS`
 - `Krisha`
+- `Kolesa`
 
 ## Запуск
 
@@ -20,7 +21,7 @@ http://127.0.0.1:8090
 
 ## Что умеет
 
-- выбирать один из трёх парсеров
+- выбирать один из подключённых парсеров
 - вводить параметры запуска через форму
 - запускать существующие CLI-скрипты без переписывания их логики
 - ставить задачу на паузу и продолжать (`Пауза` / `Старт`)
@@ -52,3 +53,4 @@ postgresql://postgres:postgres@127.0.0.1:5432/parsers
 - `/Users/gakon/PycharmProjects/olx/olx_scraper.py`
 - `/Users/gakon/PycharmProjects/olx/unified_sources/2gis/parser-2gis.py`
 - `/Users/gakon/PycharmProjects/olx/unified_sources/krisha/krisha_phone_parser.py`
+- `/Users/gakon/PycharmProjects/olx/unified_sources/kolesa/kolesa_phone_parser.py`

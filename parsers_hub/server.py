@@ -1067,6 +1067,28 @@ def parser_definitions() -> dict[str, Any]:
                 {"name": "database_url", "label": "PostgreSQL URL", "type": "text", "required": False, "default": DEFAULT_DATABASE_URL},
             ],
         },
+        "kolesa": {
+            "title": "Kolesa.kz",
+            "description": "Сбор телефонов с Kolesa по листингу автомобилей с записью результатов в PostgreSQL.",
+            "output_ext": "json",
+            "fields": [
+                {"name": "listing_url", "label": "Ссылка на листинг", "type": "url", "required": True, "default": "https://kolesa.kz/cars/"},
+                {"name": "listing_limit", "label": "Лимит объявлений", "type": "number", "required": True, "default": 10},
+                {"name": "output_name", "label": "Имя файла", "type": "text", "required": False, "default": "kolesa_results.json"},
+                {"name": "driver", "label": "Режим листинга", "type": "select", "required": True, "default": "http", "options": ["http", "selenium"]},
+                {"name": "no_proxy", "label": "Без proxy", "type": "checkbox", "required": False, "default": True},
+                {"name": "headless", "label": "Headless режим Selenium", "type": "checkbox", "required": False, "default": DEFAULT_HEADLESS},
+                {"name": "fetch_metadata", "label": "Дополнительно получать title/price", "type": "checkbox", "required": False, "default": False},
+                {"name": "app_id", "label": "Kolesa API appId", "type": "text", "required": True, "default": os.environ.get("KOLESA_PHONE_APP_ID", "881010608584")},
+                {"name": "app_key", "label": "Kolesa API appKey", "type": "text", "required": True, "default": os.environ.get("KOLESA_PHONE_APP_KEY", "b6639f8ceebfc82711fdca33977b827e")},
+                {"name": "current_user", "label": "Kolesa API currentUser", "type": "text", "required": True, "default": os.environ.get("KOLESA_PHONE_CURRENT_USER", "20822821@auto.kolesa.kz")},
+                {"name": "captcha_token", "label": "captchaToken (если нужен)", "type": "text", "required": False, "default": ""},
+                {"name": "cookie", "label": "Cookie Kolesa", "type": "text", "required": False, "default": ""},
+                {"name": "cookie_file", "label": "Файл cookie Kolesa", "type": "text", "required": False, "default": ""},
+                {"name": "verify_ssl", "label": "Проверять SSL Kolesa API", "type": "checkbox", "required": False, "default": os.environ.get("KOLESA_VERIFY_SSL", "false").strip().lower() in {"1", "true", "yes", "on"}},
+                {"name": "database_url", "label": "PostgreSQL URL", "type": "text", "required": False, "default": DEFAULT_DATABASE_URL},
+            ],
+        },
     }
 
 
@@ -1195,10 +1217,75 @@ def build_krisha_command(payload: dict[str, Any]) -> tuple[list[str], Path, Path
     return command, OLX_DIR, output_path
 
 
+def build_kolesa_command(payload: dict[str, Any]) -> tuple[list[str], Path, Path]:
+    output_dir = ensure_runs_dir("kolesa")
+    output_name = normalize_output_name(payload.get("output_name", ""), "kolesa", "json")
+    output_path = output_dir / output_name
+    data_output_path = output_dir / f"{output_path.stem}_data_{timestamp_slug()}.csv"
+    database_url = payload.get("database_url", "").strip()
+    command = [
+        resolve_python_bin(OLX_DIR),
+        "parser_hub.py",
+        "run",
+        "kolesa",
+        "--driver",
+        payload.get("driver", "http"),
+        "--listing-url",
+        payload["listing_url"].strip(),
+        "--listing-limit",
+        str(int(payload["listing_limit"])),
+        "--delay",
+        "0.7",
+        "--random-delay-min",
+        "1.2",
+        "--random-delay-max",
+        "3.5",
+        "--output",
+        str(data_output_path),
+        "--output-target",
+        "db",
+        "--report-json",
+        str(output_path),
+        "--app-id",
+        payload.get("app_id", "").strip(),
+        "--app-key",
+        payload.get("app_key", "").strip(),
+        "--current-user",
+        payload.get("current_user", "").strip(),
+    ]
+    captcha_token = payload.get("captcha_token", "").strip()
+    if captcha_token:
+        command.extend(["--captcha-token", captcha_token])
+    if payload.get("fetch_metadata", False):
+        command.append("--fetch-metadata")
+    if payload.get("no_proxy", True):
+        command.append("--no-proxy")
+    else:
+        command.extend(["--proxies-file", str(OLX_DIR / "proxyscrape_premium_http_proxies.txt")])
+    if payload.get("headless", False):
+        command.append("--headless")
+    else:
+        command.append("--no-headless")
+    if payload.get("verify_ssl", False):
+        command.append("--verify-ssl")
+    else:
+        command.append("--insecure-ssl")
+    cookie = payload.get("cookie", "").strip()
+    if cookie:
+        command.extend(["--cookie", cookie])
+    cookie_file = payload.get("cookie_file", "").strip()
+    if cookie_file:
+        command.extend(["--cookie-file", cookie_file])
+    if database_url:
+        command.extend(["--database-url", database_url])
+    return command, OLX_DIR, output_path
+
+
 COMMAND_BUILDERS = {
     "olx": build_olx_command,
     "2gis": build_2gis_command,
     "krisha": build_krisha_command,
+    "kolesa": build_kolesa_command,
 }
 
 
@@ -1225,7 +1312,7 @@ EXPORT_FIELDS: list[dict[str, str]] = [
     {"key": "url", "label": "URL"},
 ]
 EXPORT_FIELD_KEYS = {field["key"] for field in EXPORT_FIELDS}
-KNOWN_SOURCES = {"olx", "krisha", "2gis"}
+KNOWN_SOURCES = {"olx", "krisha", "kolesa", "2gis"}
 
 
 def _field_label(field: str) -> str:
