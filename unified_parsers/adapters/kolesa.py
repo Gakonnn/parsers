@@ -29,15 +29,15 @@ class KolesaAdapter(SourceAdapter):
         parser.add_argument("--proxies-file", default="", help="Proxy list file")
         parser.add_argument("--headless", dest="headless", action="store_true", help="Run Selenium fallback headless")
         parser.add_argument("--no-headless", dest="headless", action="store_false", help="Run Selenium fallback visible")
-        parser.add_argument("--app-id", default=os.environ.get("KOLESA_PHONE_APP_ID", "881010608584"), help="Kolesa phones API appId")
-        parser.add_argument("--app-key", default=os.environ.get("KOLESA_PHONE_APP_KEY", "b6639f8ceebfc82711fdca33977b827e"), help="Kolesa phones API appKey")
-        parser.add_argument("--current-user", default=os.environ.get("KOLESA_PHONE_CURRENT_USER", "20822821@auto.kolesa.kz"), help="Kolesa phones API currentUser")
+        parser.add_argument("--app-id", default="", help="Kolesa phones API appId")
+        parser.add_argument("--app-key", default="", help="Kolesa phones API appKey")
+        parser.add_argument("--current-user", default="", help="Kolesa phones API currentUser")
         parser.add_argument("--captcha-token", default="", help="Optional captchaToken")
         parser.add_argument("--cookie", default="", help="Cookie header string")
         parser.add_argument("--cookie-file", default="", help="Path to file with cookie header")
         parser.add_argument("--verify-ssl", dest="verify_ssl", action="store_true", help="Verify Kolesa SSL certificates")
         parser.add_argument("--insecure-ssl", dest="verify_ssl", action="store_false", help="Disable Kolesa SSL verification")
-        parser.add_argument("--fetch-metadata", action="store_true", help="Fetch title/price from ad pages")
+        parser.add_argument("--fetch-metadata", action="store_true", help="Compatibility option; metadata is always fetched")
         parser.add_argument("--output", default="kolesa_results.csv", help="Output CSV file path")
         parser.set_defaults(no_proxy=True, headless=True, verify_ssl=False)
 
@@ -78,18 +78,19 @@ class KolesaAdapter(SourceAdapter):
             str(args.random_delay_max),
             "--output",
             str(output_path),
-            "--app-id",
-            str(args.app_id),
-            "--app-key",
-            str(args.app_key),
-            "--current-user",
-            str(args.current_user),
         ]
+        app_id = str(args.app_id).strip()
+        if app_id:
+            command.extend(["--app-id", app_id])
+        app_key = str(args.app_key).strip()
+        if app_key:
+            command.extend(["--app-key", app_key])
+        current_user = str(args.current_user).strip()
+        if current_user:
+            command.extend(["--current-user", current_user])
         captcha_token = str(args.captcha_token).strip()
         if captcha_token:
             command.extend(["--captcha-token", captcha_token])
-        if args.fetch_metadata:
-            command.append("--fetch-metadata")
         if args.no_proxy:
             command.append("--no-proxy")
         else:

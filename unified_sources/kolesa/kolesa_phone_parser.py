@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import html as html_lib
 import json
 import os
 import random
@@ -64,13 +65,30 @@ DEFAULT_LISTING_URL = "https://kolesa.kz/cars/"
 DEFAULT_APP_ID = os.environ.get("KOLESA_PHONE_APP_ID", "881010608584")
 DEFAULT_APP_KEY = os.environ.get("KOLESA_PHONE_APP_KEY", "b6639f8ceebfc82711fdca33977b827e")
 DEFAULT_CURRENT_USER = os.environ.get("KOLESA_PHONE_CURRENT_USER", "20822821@auto.kolesa.kz")
+DEFAULT_CAPTCHA_TOKEN = os.environ.get("KOLESA_PHONE_CAPTCHA_TOKEN", "")
+DEFAULT_COOKIE = os.environ.get("KOLESA_COOKIE", "")
+DEFAULT_COOKIE_FILE = os.environ.get("KOLESA_COOKIE_FILE", "")
 DIRECT_PROXY = "__DIRECT__"
 CHECKPOINT_SUFFIX = ".checkpoint.json"
 
 AD_RE = re.compile(r"(?:https?:)?//kolesa\.kz/a/show/(\d+)|/a/show/(\d+)", re.IGNORECASE)
 PHONE_RE = re.compile(r"\+?\d[\d\s().-]{7,}\d")
 TITLE_RE = re.compile(r"<h1[^>]*>(.*?)</h1>", re.IGNORECASE | re.DOTALL)
-PRICE_RE = re.compile(r"(?:offer__price|a-price|price)[^>]*>\s*([^<]+)", re.IGNORECASE | re.DOTALL)
+INLINE_DATA_RE = re.compile(r"<script>\s*var\s+data\s*=\s*(\{.*?\})\s*;\s*</script>", re.IGNORECASE | re.DOTALL)
+OFFER_PRICE_RE = re.compile(
+    r"<div[^>]+(?:class=[\"'][^\"']*offer__price[^\"']*[\"']|data-test=[\"']offer-price[\"'])[^>]*>(.*?)</div>",
+    re.IGNORECASE | re.DOTALL,
+)
+META_DESCRIPTION_RE = re.compile(
+    r"<meta[^>]+name=[\"']description[\"'][^>]+content=[\"']([^\"']*)[\"']",
+    re.IGNORECASE | re.DOTALL,
+)
+SELLER_HTML_RE = re.compile(
+    r"<[^>]+(?:class|data-test)=[\"'][^\"']*(?:seller[-_ ]?name|seller[-_ ]?title|owner[-_ ]?name|contact[-_ ]?name|dealer[-_ ]?name)[^\"']*[\"'][^>]*>(.*?)</[^>]+>",
+    re.IGNORECASE | re.DOTALL,
+)
+METADATA_FIELDS = ("title", "price", "description", "seller_name", "city")
+ROW_FIELDNAMES = ["ad_url", "ad_id", *METADATA_FIELDS, "phones", "status", "proxy", "error"]
 
 DEFAULT_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -399,22 +417,156 @@ def extract_listing_ad_urls(html: str) -> list[str]:
     return urls
 
 
-def strip_html(text: str) -> str:
-    text = re.sub(r"<[^>]+>", " ", text or "")
+def strip_html(text: Any) -> str:
+    text = html_lib.unescape(str(text or ""))
+    text = text.replace("\xa0", " ")
+    text = re.sub(r"<br\s*/?>", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
 
+def empty_metadata() -> dict[str, str]:
+    return {field: "" for field in METADATA_FIELDS}
+
+
+def extract_inline_data(page_html: str) -> dict[str, Any]:
+    match = INLINE_DATA_RE.search(page_html)
+    if not match:
+        return {}
+    try:
+        payload = json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def first_clean_text(*values: Any) -> str:
+    for value in values:
+        text = strip_html(value)
+        if text:
+            return text
+    return ""
+
+
+def extract_offer_price(page_html: str) -> str:
+    for match in OFFER_PRICE_RE.finditer(page_html):
+        price = strip_html(match.group(1))
+        if re.search(r"\d", price):
+            return price
+    return ""
+
+
+def format_tenge_price(value: Any) -> str:
+    text = strip_html(value)
+    if not re.search(r"\d", text):
+        return ""
+    if "₸" in text or "тг" in text.lower():
+        return text
+    digits = re.sub(r"\D", "", text)
+    if not digits:
+        return text
+    return f"{int(digits):,}".replace(",", " ") + " ₸"
+
+
+def extract_seller_name_from_data(data: dict[str, Any]) -> str:
+    candidates: list[str] = []
+    seen: set[str] = set()
+
+    def add(value: Any) -> None:
+        text = strip_html(value)
+        if not text:
+            return
+        lowered = text.lower()
+        if lowered in {"контакты продавца", "показать телефон"} or "телефон" in lowered:
+            return
+        if len(text) > 120 or text in seen:
+            return
+        seen.add(text)
+        candidates.append(text)
+
+    advert = data.get("advert") if isinstance(data.get("advert"), dict) else {}
+    for key in ("sellerName", "ownerName", "contactName", "userName", "dealerName", "managerName"):
+        add(advert.get(key))
+
+    def walk(value: Any, parent_key: str = "") -> None:
+        if isinstance(value, dict):
+            parent = parent_key.lower().replace("_", "")
+            parent_is_contact = any(token in parent for token in ("seller", "owner", "dealer", "contact", "user"))
+            for key, item in value.items():
+                normalized_key = str(key).lower().replace("_", "")
+                if normalized_key in {"sellername", "ownername", "contactname", "username", "dealername", "managername"}:
+                    add(item)
+                elif parent_is_contact and normalized_key in {"name", "title", "login", "username", "displayname"}:
+                    add(item)
+                if isinstance(item, (dict, list)):
+                    walk(item, normalized_key)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item, parent_key)
+
+    walk(data)
+    return candidates[0] if candidates else ""
+
+
+def extract_seller_name_from_html(page_html: str) -> str:
+    for match in SELLER_HTML_RE.finditer(page_html):
+        text = strip_html(match.group(1))
+        lowered = text.lower()
+        if not text or len(text) > 120:
+            continue
+        if any(stop_word in lowered for stop_word in ("контакты", "телефон", "написать", "показать")):
+            continue
+        return text
+    return ""
+
+
+def infer_dealer_name_from_description(description: str, *, is_verified_dealer: bool) -> str:
+    if not is_verified_dealer:
+        return ""
+    match = re.match(
+        r"^([A-Za-zА-Яа-яЁё0-9 .,&\"'«»()/-]{3,80}?)\s+"
+        r"(?:предлагает|предлагаем|предлагают|представляет|рады предложить|рад предложить)\b",
+        description,
+        re.IGNORECASE,
+    )
+    if not match:
+        return ""
+    return strip_html(match.group(1))
+
+
 def extract_page_metadata(html: str) -> dict[str, str]:
-    title = ""
-    price = ""
-    title_match = TITLE_RE.search(html)
-    if title_match:
-        title = strip_html(title_match.group(1))
-    price_match = PRICE_RE.search(html)
-    if price_match:
-        price = strip_html(price_match.group(1))
-    return {"title": title, "price": price}
+    metadata = empty_metadata()
+    data = extract_inline_data(html)
+    advert = data.get("advert") if isinstance(data.get("advert"), dict) else {}
+    product = data.get("product") if isinstance(data.get("product"), dict) else {}
+
+    metadata["title"] = first_clean_text(advert.get("title"))
+    metadata["description"] = first_clean_text(advert.get("descriptionText"), advert.get("description"))
+    metadata["city"] = first_clean_text(advert.get("region"), advert.get("city"), advert.get("location"))
+    metadata["seller_name"] = extract_seller_name_from_data(data)
+    metadata["price"] = extract_offer_price(html)
+    if not metadata["price"]:
+        metadata["price"] = format_tenge_price(advert.get("price") or product.get("price") or product.get("unitPrice"))
+
+    if not metadata["title"]:
+        metadata["title"] = first_clean_text(product.get("name"))
+    if not metadata["title"]:
+        title_match = TITLE_RE.search(html)
+        if title_match:
+            metadata["title"] = strip_html(title_match.group(1))
+    if not metadata["description"]:
+        description_match = META_DESCRIPTION_RE.search(html)
+        if description_match:
+            metadata["description"] = strip_html(description_match.group(1))
+    if not metadata["seller_name"]:
+        metadata["seller_name"] = extract_seller_name_from_html(html)
+    if not metadata["seller_name"]:
+        metadata["seller_name"] = infer_dealer_name_from_description(
+            metadata["description"],
+            is_verified_dealer=bool(advert.get("isVerifiedDealer")),
+        )
+    return metadata
 
 
 def extract_phones(payload: Any) -> list[str]:
@@ -585,7 +737,7 @@ def fetch_ad_metadata(ad_url: str, rotator: ProxyRotator, base_headers: dict[str
         result = rotator.request("GET", ad_url, headers=base_headers, ok_statuses={200})
         return extract_page_metadata(result.response.text)
     except Exception:  # noqa: BLE001
-        return {"title": "", "price": ""}
+        return empty_metadata()
 
 
 def fetch_phone_for_ad(
@@ -597,24 +749,20 @@ def fetch_phone_for_ad(
     app_key: str,
     current_user: str,
     captcha_token: str,
-    fetch_metadata: bool,
 ) -> dict[str, str]:
     ad_id = parse_ad_id(ad_url)
     if not ad_id:
         return {
             "ad_url": ad_url,
             "ad_id": "",
-            "title": "",
-            "price": "",
+            **empty_metadata(),
             "phones": "",
             "status": "error",
             "proxy": "",
             "error": "Cannot parse ad id from url",
         }
 
-    metadata = {"title": "", "price": ""}
-    if fetch_metadata:
-        metadata = fetch_ad_metadata(ad_url, rotator, base_headers)
+    metadata = fetch_ad_metadata(ad_url, rotator, base_headers)
 
     api_url = f"https://app.kolesa.kz/adverts/{ad_id}/phones"
     headers = dict(API_HEADERS)
@@ -642,8 +790,7 @@ def fetch_phone_for_ad(
             return {
                 "ad_url": ad_url,
                 "ad_id": ad_id,
-                "title": metadata.get("title", ""),
-                "price": metadata.get("price", ""),
+                **metadata,
                 "phones": "",
                 "status": "auth_required",
                 "proxy": result.proxy,
@@ -653,8 +800,7 @@ def fetch_phone_for_ad(
             return {
                 "ad_url": ad_url,
                 "ad_id": ad_id,
-                "title": metadata.get("title", ""),
-                "price": metadata.get("price", ""),
+                **metadata,
                 "phones": "",
                 "status": "captcha_required",
                 "proxy": result.proxy,
@@ -664,8 +810,7 @@ def fetch_phone_for_ad(
             return {
                 "ad_url": ad_url,
                 "ad_id": ad_id,
-                "title": metadata.get("title", ""),
-                "price": metadata.get("price", ""),
+                **metadata,
                 "phones": "",
                 "status": "error",
                 "proxy": result.proxy,
@@ -675,8 +820,7 @@ def fetch_phone_for_ad(
         return {
             "ad_url": ad_url,
             "ad_id": ad_id,
-            "title": metadata.get("title", ""),
-            "price": metadata.get("price", ""),
+            **metadata,
             "phones": ";".join(phones),
             "status": "ok" if phones else "no_phone",
             "proxy": result.proxy,
@@ -686,8 +830,7 @@ def fetch_phone_for_ad(
         return {
             "ad_url": ad_url,
             "ad_id": ad_id,
-            "title": metadata.get("title", ""),
-            "price": metadata.get("price", ""),
+            **metadata,
             "phones": "",
             "status": "error",
             "proxy": "",
@@ -696,10 +839,9 @@ def fetch_phone_for_ad(
 
 
 def save_csv(rows: list[dict[str, str]], out_path: Path) -> None:
-    fieldnames = ["ad_url", "ad_id", "title", "price", "phones", "status", "proxy", "error"]
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=ROW_FIELDNAMES, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
 
@@ -722,8 +864,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--json-output", default="", help="Optional JSON output")
     parser.add_argument("--checkpoint-file", default="", help="Path to resume checkpoint JSON")
     parser.add_argument("--database-url", default="", help="PostgreSQL DSN for live per-record insert")
-    parser.add_argument("--cookie", default="", help="Cookie header string for authenticated Kolesa session")
-    parser.add_argument("--cookie-file", default="", help="Path to file with Kolesa cookie header")
+    parser.add_argument("--cookie", default=DEFAULT_COOKIE, help="Cookie header string for authenticated Kolesa session")
+    parser.add_argument("--cookie-file", default=DEFAULT_COOKIE_FILE, help="Path to file with Kolesa cookie header")
     parser.add_argument("--timeout", type=float, default=12.0, help="HTTP timeout per request")
     parser.add_argument("--delay", type=float, default=0.7, help="Delay between ads")
     parser.add_argument("--random-delay-min", type=float, default=1.2, help="Minimum random delay")
@@ -735,7 +877,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--app-id", default=DEFAULT_APP_ID, help="Kolesa phones API appId")
     parser.add_argument("--app-key", default=DEFAULT_APP_KEY, help="Kolesa phones API appKey")
     parser.add_argument("--current-user", default=DEFAULT_CURRENT_USER, help="Kolesa phones API currentUser")
-    parser.add_argument("--captcha-token", default="", help="Optional captchaToken for phones API")
+    parser.add_argument("--captcha-token", default=DEFAULT_CAPTCHA_TOKEN, help="Optional captchaToken for phones API")
     parser.add_argument(
         "--verify-ssl",
         dest="verify_ssl",
@@ -748,7 +890,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_false",
         help="Disable SSL verification for Kolesa requests",
     )
-    parser.add_argument("--fetch-metadata", action="store_true", help="Also fetch ad page title/price")
+    parser.add_argument("--fetch-metadata", action="store_true", help="Compatibility option; metadata is always fetched")
     parser.add_argument("--shuffle", action="store_true", help="Shuffle ad URLs before processing")
     parser.set_defaults(headless=True, verify_ssl=os.environ.get("KOLESA_VERIFY_SSL", "false").strip().lower() in {"1", "true", "yes", "on"})
     return parser
@@ -831,7 +973,6 @@ def main() -> int:
                 app_key=args.app_key.strip(),
                 current_user=args.current_user.strip(),
                 captcha_token=args.captcha_token.strip(),
-                fetch_metadata=args.fetch_metadata,
             )
             rows.append(row)
             if live_db_writer:
