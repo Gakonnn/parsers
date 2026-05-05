@@ -355,10 +355,11 @@ class MainParser:
                 setattr(writer, "_wrote_count", collected_records)
             except Exception:
                 pass
-            emit_progress()
 
         def emit_progress() -> None:
             logger.info("[progress] %s / %s", collected_records, self._options.max_records)
+
+        emit_progress()
 
         def persist_checkpoint() -> None:
             _save_checkpoint(
