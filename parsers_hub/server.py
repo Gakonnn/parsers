@@ -361,7 +361,8 @@ class JobManager:
         auto_max_attempts = max(1, int(env.get("PARSERS_HUB_2GIS_AUTO_MAX_ATTEMPTS", "10")))
         auto_probe_seconds = max(4, int(env.get("PARSERS_HUB_2GIS_AUTO_PROBE_SECONDS", "10")))
         auto_first_deadline = max(1.0, float(env.get("PARSERS_HUB_2GIS_AUTO_FIRST_PARSE_DEADLINE", "7")))
-        auto_min_rps = max(0.1, float(env.get("PARSERS_HUB_2GIS_AUTO_MIN_RPS", "0.8")))
+        auto_min_records = max(1, int(env.get("PARSERS_HUB_2GIS_AUTO_MIN_RECORDS", "3")))
+        auto_error_budget = max(0, int(env.get("PARSERS_HUB_2GIS_AUTO_ERROR_BUDGET", "1")))
 
         process: subprocess.Popen[str] | None = None
         attempt = 0
@@ -423,14 +424,14 @@ class JobManager:
             stable = (
                 first_parse_delay is not None
                 and first_parse_delay <= auto_first_deadline
-                and rps >= auto_min_rps
-                and error_count == 0
+                and parsed_count >= auto_min_records
+                and error_count <= auto_error_budget
             )
             self._append_log(
                 job,
                 f"[auto] Итог попытки {attempt}: records={parsed_count}, "
                 f"first={round(first_parse_delay, 2) if first_parse_delay is not None else 'none'}s, "
-                f"rps={round(rps, 2)}, errors={error_count}\n",
+                f"rps={round(rps, 2)}, errors={error_count}, min_records={auto_min_records}\n",
             )
 
             if job.stop_requested:

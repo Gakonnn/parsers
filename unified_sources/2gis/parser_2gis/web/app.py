@@ -36,11 +36,14 @@ class _WebState:
         self.auto_max_attempts = 12
         self.auto_probe_seconds = 12
         self.auto_first_parse_deadline = 5.0
-        self.auto_min_rps = 1.0
+        self.auto_min_records = 3
+        self.auto_error_budget = 1
+        self.auto_prewarm_delay = 2.5
         self.auto_current_attempt = 0
         self.attempt_started_at = 0.0
         self.attempt_parsed_events = 0
         self.attempt_first_parse_delay: float | None = None
+        self.attempt_error_events = 0
 
     def drain_logs(self) -> None:
         while True:
@@ -53,6 +56,8 @@ class _WebState:
                 self.attempt_parsed_events += 1
                 if self.attempt_first_parse_delay is None:
                     self.attempt_first_parse_delay = max(0.0, time.time() - self.attempt_started_at)
+            if self.attempt_started_at > 0 and ('Данные не получены' in message or 'ERROR' in message):
+                self.attempt_error_events += 1
 
 
 def _is_runner_alive(state: _WebState) -> bool:
@@ -92,7 +97,9 @@ def _render_page(state: _WebState) -> str:
         auto_max_attempts = state.auto_max_attempts
         auto_probe_seconds = state.auto_probe_seconds
         auto_first_parse_deadline = state.auto_first_parse_deadline
-        auto_min_rps = state.auto_min_rps
+        auto_min_records = state.auto_min_records
+        auto_error_budget = state.auto_error_budget
+        auto_prewarm_delay = state.auto_prewarm_delay
         auto_current_attempt = state.auto_current_attempt
 
     format_options = ''.join(
@@ -227,8 +234,19 @@ def _render_page(state: _WebState) -> str:
 
         <div class="row">
           <div>
-            <label for="auto_min_rps">Мин. скорость (записей/сек)</label>
-            <input id="auto_min_rps" type="number" step="0.1" name="auto_min_rps" value="{auto_min_rps}" min="0.1" max="10">
+            <label for="auto_min_records">Мин. записей для старта</label>
+            <input id="auto_min_records" type="number" name="auto_min_records" value="{auto_min_records}" min="1" max="100">
+          </div>
+          <div>
+            <label for="auto_error_budget">Допустимо ошибок</label>
+            <input id="auto_error_budget" type="number" name="auto_error_budget" value="{auto_error_budget}" min="0" max="20">
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label for="auto_prewarm_delay">Прогрев перед проверкой (сек)</label>
+            <input id="auto_prewarm_delay" type="number" step="0.1" name="auto_prewarm_delay" value="{auto_prewarm_delay}" min="0" max="10">
           </div>
           <div>
             <label>Текущая авто-попытка</label>
@@ -316,7 +334,9 @@ def web_app(urls: list[str] | None, output_path: str | None,
             max_attempts = max(1, int(state.auto_max_attempts))
             probe_seconds = max(4, int(state.auto_probe_seconds))
             first_deadline = max(1.0, float(state.auto_first_parse_deadline))
-            min_rps = max(0.1, float(state.auto_min_rps))
+            min_records = max(1, int(state.auto_min_records))
+            error_budget = max(0, int(state.auto_error_budget))
+            prewarm_delay = max(0.0, float(state.auto_prewarm_delay))
 
         for attempt in range(1, max_attempts + 1):
             with state.lock:
@@ -326,11 +346,32 @@ def web_app(urls: list[str] | None, output_path: str | None,
             _log(f"[auto] Попытка запуска {attempt}/{max_attempts}")
 
             runner = _start_runner()
+            with state.lock:
+                state.attempt_parsed_events = 0
+                state.attempt_first_parse_delay = None
+                state.attempt_error_events = 0
+                state.drain_logs()
+
+            warmup_start = time.time()
+            if prewarm_delay > 0:
+                _log(f"[auto] Прогрев {round(prewarm_delay, 1)}с перед оценкой старта.")
+            while time.time() - warmup_start < prewarm_delay:
+                with state.lock:
+                    if state.stop_requested:
+                        _stop_runner(runner)
+                        state.runner = None
+                        break
+                    state.drain_logs()
+                if not runner.is_alive():
+                    break
+                time.sleep(0.25)
+
             start_ts = time.time()
             with state.lock:
                 state.attempt_started_at = start_ts
                 state.attempt_parsed_events = 0
                 state.attempt_first_parse_delay = None
+                state.attempt_error_events = 0
                 state.drain_logs()
 
             while time.time() - start_ts < probe_seconds:
@@ -351,17 +392,19 @@ def web_app(urls: list[str] | None, output_path: str | None,
                 state.drain_logs()
                 records_seen = state.attempt_parsed_events
                 first_record_delay = state.attempt_first_parse_delay
+                error_count = state.attempt_error_events
                 state.attempt_started_at = 0.0
             rps = records_seen / elapsed
             stable = (
                 first_record_delay is not None
                 and first_record_delay <= first_deadline
-                and rps >= min_rps
+                and records_seen >= min_records
+                and error_count <= error_budget
             )
             _log(
                 f"[auto] Итог попытки {attempt}: records={records_seen}, "
                 f"first={round(first_record_delay,2) if first_record_delay is not None else 'none'}s, "
-                f"rps={round(rps,2)}"
+                f"rps={round(rps,2)}, errors={error_count}, min_records={min_records}"
             )
 
             if stable:
@@ -473,7 +516,9 @@ def web_app(urls: list[str] | None, output_path: str | None,
                 auto_max_attempts = int(form_data.get('auto_max_attempts', ['12'])[0] or '12')
                 auto_probe_seconds = int(form_data.get('auto_probe_seconds', ['12'])[0] or '12')
                 auto_first_parse_deadline = float(form_data.get('auto_first_parse_deadline', ['5'])[0] or '5')
-                auto_min_rps = float(form_data.get('auto_min_rps', ['1.0'])[0] or '1.0')
+                auto_min_records = int(form_data.get('auto_min_records', ['3'])[0] or '3')
+                auto_error_budget = int(form_data.get('auto_error_budget', ['1'])[0] or '1')
+                auto_prewarm_delay = float(form_data.get('auto_prewarm_delay', ['2.5'])[0] or '2.5')
 
                 should_start = False
                 with state.lock:
@@ -486,7 +531,9 @@ def web_app(urls: list[str] | None, output_path: str | None,
                         state.auto_max_attempts = max(1, min(auto_max_attempts, 50))
                         state.auto_probe_seconds = max(4, min(auto_probe_seconds, 60))
                         state.auto_first_parse_deadline = max(1.0, min(auto_first_parse_deadline, 20.0))
-                        state.auto_min_rps = max(0.1, min(auto_min_rps, 10.0))
+                        state.auto_min_records = max(1, min(auto_min_records, 100))
+                        state.auto_error_budget = max(0, min(auto_error_budget, 20))
+                        state.auto_prewarm_delay = max(0.0, min(auto_prewarm_delay, 10.0))
                         state.stop_requested = False
                         state.logs = []
                         state.auto_current_attempt = 0

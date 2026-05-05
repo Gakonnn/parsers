@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import os
 import json
 import re
 import urllib.parse
@@ -204,7 +205,8 @@ class MainParser:
         # Let initial XHR requests settle, then drop stale buffered catalog
         # responses so the first click waits only for its own card response.
         self._wait_requests_finished()
-        self._chrome_remote.wait(0.5)
+        warmup_delay = max(0.0, float(os.environ.get('PARSER_2GIS_PREWARM_DELAY_SEC', '1.5')))
+        self._chrome_remote.wait(warmup_delay)
         if hasattr(self._chrome_remote, 'clear_response_queue'):
             self._chrome_remote.clear_response_queue(self._item_response_pattern)
 
