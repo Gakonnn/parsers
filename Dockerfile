@@ -39,6 +39,7 @@ RUN python -m pip install --upgrade pip && \
       psutil \
       xlsxwriter \
       parser-2gis && \
+    python -m pip install --no-cache-dir /app/unified_sources/2gis && \
     python - <<'PY'
 import shutil
 from pathlib import Path
