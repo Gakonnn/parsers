@@ -51,13 +51,13 @@
 Текущая структура (всё в одном репозитории):
 
 - `olx`:
-  - `/Users/gakon/PycharmProjects/olx/olx_scraper.py`
+  - `olx_scraper.py`
 - `krisha`:
-  - `/Users/gakon/PycharmProjects/olx/unified_sources/krisha/krisha_phone_parser.py`
+  - `unified_sources/krisha/krisha_phone_parser.py`
 - `kolesa`:
-  - `/Users/gakon/PycharmProjects/olx/unified_sources/kolesa/kolesa_phone_parser.py`
+  - `unified_sources/kolesa/kolesa_phone_parser.py`
 - `2gis`:
-  - `/Users/gakon/PycharmProjects/olx/unified_sources/2gis/parser-2gis.py`
+  - `unified_sources/2gis/parser-2gis.py`
 
 Показать источники:
 

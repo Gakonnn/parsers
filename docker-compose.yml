@@ -19,6 +19,7 @@ services:
 
   selenium:
     image: selenium/standalone-chrome:4.33.0
+    platform: linux/amd64
     container_name: olx-selenium
     restart: unless-stopped
     shm_size: "2gb"
@@ -29,7 +30,18 @@ services:
       SE_NODE_MAX_SESSIONS: 1
       SE_NODE_OVERRIDE_MAX_SESSIONS: true
 
+  redis:
+    image: redis:7-alpine
+    container_name: parsers-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+
   parsers_hub:
+    platform: linux/amd64
     build:
       context: .
       dockerfile: Dockerfile
@@ -45,8 +57,8 @@ services:
       PARSERS_HUB_PORT: 8090
       PARSERS_PROJECT_ROOT: /app
       PARSERS_PYTHON_BIN: /usr/local/bin/python
-      PARSERS_HUB_DATABASE_URL: ${DATABASE_URL}
-      DATABASE_URL: ${DATABASE_URL}
+      PARSERS_HUB_DATABASE_URL: ${DATABASE_URL:-postgresql://parsers:parsers@postgres:5432/parsers}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://parsers:parsers@postgres:5432/parsers}
       CHROME_BINARY: /usr/bin/chromium
       CHROMIUM_BINARY: /usr/bin/chromium
       TZ: ${TZ:-Asia/Almaty}
@@ -55,7 +67,89 @@ services:
     volumes:
       - ./parsers_hub/runs:/app/parsers_hub/runs
       - ./unified_runs:/app/unified_runs
-      - ./proxyscrape_premium_http_proxies.txt:/app/proxyscrape_premium_http_proxies.txt:ro
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: parsers-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      BACKEND_DATABASE_URL: ${DATABASE_URL:-postgresql://parsers:parsers@postgres:5432/parsers}
+      BACKEND_SECRET_KEY: ${BACKEND_SECRET_KEY:-change-me-in-production}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      BACKEND_AUTO_CREATE_TABLES: ${BACKEND_AUTO_CREATE_TABLES:-false}
+      BACKEND_CELERY_BROKER_URL: ${BACKEND_CELERY_BROKER_URL:-redis://redis:6379/0}
+      BACKEND_CELERY_RESULT_BACKEND: ${BACKEND_CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      PARSERS_HUB_INTERNAL_URL: ${PARSERS_HUB_INTERNAL_URL:-http://parsers_hub:8090}
+      BACKEND_JOB_POLL_INTERVAL_SEC: ${BACKEND_JOB_POLL_INTERVAL_SEC:-2}
+      BACKEND_FREE_PLAN_JOBS_PER_MONTH: ${BACKEND_FREE_PLAN_JOBS_PER_MONTH:-10}
+      BACKEND_FREE_PLAN_RECORDS_PER_MONTH: ${BACKEND_FREE_PLAN_RECORDS_PER_MONTH:-500}
+      BACKEND_FREE_PLAN_SOURCES: ${BACKEND_FREE_PLAN_SOURCES:-olx,krisha,2gis,kolesa}
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-change-payment-webhook-secret}
+      PAYMENT_SUCCESS_URL: ${PAYMENT_SUCCESS_URL:-}
+      PAYMENT_CANCEL_URL: ${PAYMENT_CANCEL_URL:-}
+      TZ: ${TZ:-Asia/Almaty}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  backend_worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: parsers-backend-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      parsers_hub:
+        condition: service_started
+    environment:
+      BACKEND_DATABASE_URL: ${DATABASE_URL:-postgresql://parsers:parsers@postgres:5432/parsers}
+      BACKEND_SECRET_KEY: ${BACKEND_SECRET_KEY:-change-me-in-production}
+      BACKEND_CELERY_BROKER_URL: ${BACKEND_CELERY_BROKER_URL:-redis://redis:6379/0}
+      BACKEND_CELERY_RESULT_BACKEND: ${BACKEND_CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      PARSERS_HUB_INTERNAL_URL: ${PARSERS_HUB_INTERNAL_URL:-http://parsers_hub:8090}
+      BACKEND_JOB_POLL_INTERVAL_SEC: ${BACKEND_JOB_POLL_INTERVAL_SEC:-2}
+      BACKEND_FREE_PLAN_JOBS_PER_MONTH: ${BACKEND_FREE_PLAN_JOBS_PER_MONTH:-10}
+      BACKEND_FREE_PLAN_RECORDS_PER_MONTH: ${BACKEND_FREE_PLAN_RECORDS_PER_MONTH:-500}
+      BACKEND_FREE_PLAN_SOURCES: ${BACKEND_FREE_PLAN_SOURCES:-olx,krisha,2gis,kolesa}
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-change-payment-webhook-secret}
+      PAYMENT_SUCCESS_URL: ${PAYMENT_SUCCESS_URL:-}
+      PAYMENT_CANCEL_URL: ${PAYMENT_CANCEL_URL:-}
+      TZ: ${TZ:-Asia/Almaty}
+    command: >
+      celery -A app.worker.celery_app worker
+      --loglevel=INFO
+      --queues=parsers
+      --concurrency=${BACKEND_WORKER_CONCURRENCY:-1}
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+    container_name: parsers-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+      TZ: ${TZ:-Asia/Almaty}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
 
   pgadmin:
     image: dpage/pgadmin4:9
@@ -73,3 +167,4 @@ services:
 
 volumes:
   pg_data:
+  redis_data:

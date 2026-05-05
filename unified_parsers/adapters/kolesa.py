@@ -41,6 +41,8 @@ class KolesaAdapter(SourceAdapter):
         parser.add_argument("--sessions-file", default="", help="Path to JSON file with Kolesa mobile sessions")
         parser.add_argument("--session-cooldown-sec", type=float, default=900.0, help="Cooldown after Kolesa captcha/auth")
         parser.add_argument("--phone-max-session-attempts", type=int, default=20, help="Max Kolesa session attempts per phone")
+        parser.add_argument("--crawlbase-token", default="", help="Optional Crawlbase token for Kolesa phone fallback")
+        parser.add_argument("--crawlbase-js-token", default="", help="Optional Crawlbase JS token for Kolesa phone fallback")
         parser.add_argument("--cookie", default="", help="Cookie header string")
         parser.add_argument("--cookie-file", default="", help="Path to file with cookie header")
         parser.add_argument("--verify-ssl", dest="verify_ssl", action="store_true", help="Verify Kolesa SSL certificates")
@@ -119,6 +121,12 @@ class KolesaAdapter(SourceAdapter):
             command.extend(["--sessions-file", sessions_file])
         command.extend(["--session-cooldown-sec", str(args.session_cooldown_sec)])
         command.extend(["--phone-max-session-attempts", str(args.phone_max_session_attempts)])
+        crawlbase_token = str(args.crawlbase_token).strip()
+        if crawlbase_token:
+            command.extend(["--crawlbase-token", crawlbase_token])
+        crawlbase_js_token = str(args.crawlbase_js_token).strip()
+        if crawlbase_js_token:
+            command.extend(["--crawlbase-js-token", crawlbase_js_token])
         if args.no_proxy:
             command.append("--no-proxy")
         else:

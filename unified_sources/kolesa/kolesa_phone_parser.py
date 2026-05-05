@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import urlencode, urlparse
 from urllib.request import HTTPSHandler, ProxyHandler, Request, build_opener
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -78,6 +78,8 @@ DEFAULT_APP_PUSH_ENABLE = os.environ.get("KOLESA_APP_PUSH_ENABLE", "false")
 DEFAULT_SESSIONS_JSON = os.environ.get("KOLESA_SESSIONS_JSON", "")
 DEFAULT_SESSIONS_FILE = os.environ.get("KOLESA_SESSIONS_FILE", "")
 DEFAULT_SESSION_COOLDOWN_SEC = float(os.environ.get("KOLESA_SESSION_COOLDOWN_SEC", "900") or 900)
+DEFAULT_CRAWLBASE_TOKEN = os.environ.get("KOLESA_CRAWLBASE_TOKEN", os.environ.get("CRAWLBASE_TOKEN", ""))
+DEFAULT_CRAWLBASE_JS_TOKEN = os.environ.get("KOLESA_CRAWLBASE_JS_TOKEN", os.environ.get("CRAWLBASE_JS_TOKEN", ""))
 DIRECT_PROXY = "__DIRECT__"
 CHECKPOINT_SUFFIX = ".checkpoint.json"
 
@@ -247,6 +249,81 @@ class ProxyRotator:
         if last_error:
             raise RuntimeError(f"All proxies failed, last error: {last_error}") from last_error
         raise RuntimeError("All proxies failed with non-success status")
+
+
+class CrawlbaseClient:
+    """Optional fallback transport for Kolesa phone API when the direct IP gets challenged."""
+
+    def __init__(self, token: str, *, timeout: float, verify_ssl: bool = True) -> None:
+        self.token = token.strip()
+        self.timeout = timeout
+        self._ssl_context = ProxyRotator._build_ssl_context(verify_ssl=verify_ssl)
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.token)
+
+    @staticmethod
+    def _request_headers_param(headers: dict[str, str]) -> str:
+        allowed_headers = [
+            "accept",
+            "accept-language",
+            "app-language",
+            "app-location",
+            "app-photo-format",
+            "app-platform",
+            "app-platform-version",
+            "app-push-enable",
+            "app-version",
+            "idfa",
+            "referer",
+            "user-agent",
+            "x-app-screen-coefficient",
+            "x-auth-token",
+            "x-phone-id",
+        ]
+        parts: list[str] = []
+        for key, value in headers.items():
+            header_key = key.strip()
+            header_value = str(value or "").strip()
+            if not header_key or not header_value or header_key.lower() == "cookie":
+                continue
+            if header_key.lower() not in allowed_headers:
+                continue
+            parts.append(f"{header_key}:{header_value}")
+        return "|".join(parts)
+
+    def request_json(self, target_url: str, *, headers: dict[str, str]) -> tuple[Any, str]:
+        if not self.enabled:
+            raise RuntimeError("Crawlbase token is not configured")
+        params = {
+            "token": self.token,
+            "url": target_url,
+        }
+        request_headers = self._request_headers_param(headers)
+        if request_headers:
+            params["request_headers"] = request_headers
+        cookie = headers.get("Cookie", "").strip()
+        if cookie:
+            params["cookies"] = cookie
+        crawlbase_url = f"https://api.crawlbase.com/?{urlencode(params)}"
+        req = Request(url=crawlbase_url, method="GET", headers={"Accept": "application/json,*/*"})
+        opener = build_opener(HTTPSHandler(context=self._ssl_context))
+        try:
+            with opener.open(req, timeout=self.timeout) as resp:
+                body = resp.read()
+        except HTTPError as exc:
+            body = exc.read()
+        text = body.decode("utf-8", errors="replace")
+        payload = json.loads(text)
+        if isinstance(payload, dict):
+            nested_body = payload.get("body") or payload.get("original_body")
+            if isinstance(nested_body, str):
+                try:
+                    return json.loads(nested_body), "crawlbase"
+                except json.JSONDecodeError:
+                    pass
+        return payload, "crawlbase"
 
 
 class LiveDbWriter:
@@ -500,15 +577,19 @@ class KolesaSessionManager:
                 return session
         return None
 
-    def mark_captcha(self, session: KolesaSession) -> None:
-        session.captcha_hits += 1
+    def mark_unavailable(self, session: KolesaSession, reason: str) -> None:
+        if reason == "captcha_required":
+            session.captcha_hits += 1
+        elif reason == "auth_required":
+            session.auth_hits += 1
         session.unavailable_until = time.time() + self.cooldown_sec
-        print(f"  -> kolesa session cooldown: {session.label}, reason=captcha_required, cooldown={int(self.cooldown_sec)}s")
+        print(f"  -> kolesa session cooldown: {session.label}, reason={reason}, cooldown={int(self.cooldown_sec)}s")
+
+    def mark_captcha(self, session: KolesaSession) -> None:
+        self.mark_unavailable(session, "captcha_required")
 
     def mark_auth_required(self, session: KolesaSession) -> None:
-        session.auth_hits += 1
-        session.unavailable_until = time.time() + self.cooldown_sec
-        print(f"  -> kolesa session cooldown: {session.label}, reason=auth_required, cooldown={int(self.cooldown_sec)}s")
+        self.mark_unavailable(session, "auth_required")
 
     def base_headers_for(self, session: KolesaSession | None = None) -> dict[str, str]:
         if session is None:
@@ -925,6 +1006,7 @@ def fetch_phone_for_ad(
     *,
     session_manager: KolesaSessionManager,
     max_session_attempts: int,
+    crawlbase_client: CrawlbaseClient | None = None,
 ) -> dict[str, str]:
     ad_id = parse_ad_id(ad_url)
     if not ad_id:
@@ -956,6 +1038,59 @@ def fetch_phone_for_ad(
     attempts = max(1, min(max_session_attempts, max(1, len(session_manager.sessions))))
     last_row: dict[str, str] | None = None
     session = first_session
+
+    def phone_params(current_session: KolesaSession) -> dict[str, str]:
+        return {
+            "appId": current_session.app_id,
+            "appKey": current_session.app_key,
+            "captchaToken": current_session.captcha_token,
+            "currentUser": current_session.current_user,
+        }
+
+    def row_for_condition(current_session: KolesaSession, condition: str, proxy_label: str) -> dict[str, str]:
+        if condition == "auth_required":
+            error = "Authorization is required by kolesa.kz for this phone"
+        elif condition == "captcha_required":
+            error = "CAPTCHA token is required by kolesa.kz for this phone"
+        else:
+            error = f"Kolesa API status: {condition}"
+        return {
+            "ad_url": ad_url,
+            "ad_id": ad_id,
+            **metadata,
+            "phones": "",
+            "status": condition,
+            "proxy": proxy_label,
+            "error": error,
+        }
+
+    def try_crawlbase(current_session: KolesaSession, headers: dict[str, str]) -> dict[str, str] | None:
+        if crawlbase_client is None or not crawlbase_client.enabled:
+            return None
+        target_url = f"{api_url}?{urlencode(phone_params(current_session))}"
+        try:
+            payload, proxy_label = crawlbase_client.request_json(target_url, headers=headers)
+        except Exception as exc:  # noqa: BLE001
+            print(f"  -> crawlbase fallback failed: {exc}")
+            return None
+        phones = extract_phones(payload)
+        condition = detect_api_condition(payload)
+        if condition in {"auth_required", "captcha_required"}:
+            print(f"  -> crawlbase fallback challenged: session={current_session.label}, reason={condition}")
+            return row_for_condition(current_session, condition, proxy_label)
+        if condition and condition not in {"success", "ok"}:
+            return row_for_condition(current_session, condition, proxy_label)
+        print(f"  -> crawlbase fallback ok: session={current_session.label}, phones={len(phones)}")
+        return {
+            "ad_url": ad_url,
+            "ad_id": ad_id,
+            **metadata,
+            "phones": ";".join(phones),
+            "status": "ok" if phones else "no_phone",
+            "proxy": proxy_label,
+            "error": "",
+        }
+
     for attempt in range(1, attempts + 1):
         if session is None:
             break
@@ -966,12 +1101,7 @@ def fetch_phone_for_ad(
                 "GET",
                 api_url,
                 headers=headers,
-                params={
-                    "appId": session.app_id,
-                    "appKey": session.app_key,
-                    "captchaToken": session.captcha_token,
-                    "currentUser": session.current_user,
-                },
+                params=phone_params(session),
                 ok_statuses={200},
             )
             payload = result.response.json()
@@ -979,29 +1109,19 @@ def fetch_phone_for_ad(
             condition = detect_api_condition(payload)
 
             if condition == "auth_required":
+                fallback_row = try_crawlbase(session, headers)
+                if fallback_row and fallback_row.get("status") not in {"auth_required", "captcha_required"}:
+                    return fallback_row
                 session_manager.mark_auth_required(session)
-                last_row = {
-                    "ad_url": ad_url,
-                    "ad_id": ad_id,
-                    **metadata,
-                    "phones": "",
-                    "status": "auth_required",
-                    "proxy": result.proxy,
-                    "error": "Authorization is required by kolesa.kz for this phone",
-                }
+                last_row = fallback_row or row_for_condition(session, condition, result.proxy)
                 session = session_manager.next_session()
                 continue
             if condition == "captcha_required":
+                fallback_row = try_crawlbase(session, headers)
+                if fallback_row and fallback_row.get("status") not in {"auth_required", "captcha_required"}:
+                    return fallback_row
                 session_manager.mark_captcha(session)
-                last_row = {
-                    "ad_url": ad_url,
-                    "ad_id": ad_id,
-                    **metadata,
-                    "phones": "",
-                    "status": "captcha_required",
-                    "proxy": result.proxy,
-                    "error": "CAPTCHA token is required by kolesa.kz for this phone",
-                }
+                last_row = fallback_row or row_for_condition(session, condition, result.proxy)
                 session = session_manager.next_session()
                 continue
             if condition and condition not in {"success", "ok"}:
@@ -1025,6 +1145,17 @@ def fetch_phone_for_ad(
                 "error": "",
             }
         except Exception as exc:  # noqa: BLE001
+            fallback_row = try_crawlbase(session, headers)
+            if fallback_row:
+                if fallback_row.get("status") not in {"auth_required", "captcha_required"}:
+                    return fallback_row
+                if fallback_row.get("status") == "auth_required":
+                    session_manager.mark_auth_required(session)
+                elif fallback_row.get("status") == "captcha_required":
+                    session_manager.mark_captcha(session)
+                last_row = fallback_row
+                session = session_manager.next_session()
+                continue
             return {
                 "ad_url": ad_url,
                 "ad_id": ad_id,
@@ -1101,6 +1232,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sessions-file", default=DEFAULT_SESSIONS_FILE, help="Path to JSON file with Kolesa mobile sessions")
     parser.add_argument("--session-cooldown-sec", type=float, default=DEFAULT_SESSION_COOLDOWN_SEC, help="Cooldown for a Kolesa session after captcha/auth")
     parser.add_argument("--phone-max-session-attempts", type=int, default=20, help="Max session rotation attempts per advert phone")
+    parser.add_argument("--crawlbase-token", default=DEFAULT_CRAWLBASE_TOKEN, help="Optional Crawlbase token for phone API fallback")
+    parser.add_argument("--crawlbase-js-token", default=DEFAULT_CRAWLBASE_JS_TOKEN, help="Optional Crawlbase JS token for phone API fallback")
     parser.add_argument(
         "--verify-ssl",
         dest="verify_ssl",
@@ -1147,8 +1280,11 @@ def main() -> int:
     )
     sessions = load_kolesa_sessions(args)
     session_manager = KolesaSessionManager(sessions, cooldown_sec=float(args.session_cooldown_sec))
+    crawlbase_token = args.crawlbase_token.strip() or args.crawlbase_js_token.strip()
+    crawlbase_client = CrawlbaseClient(crawlbase_token, timeout=args.timeout, verify_ssl=bool(args.verify_ssl)) if crawlbase_token else None
     base_headers = session_manager.base_headers_for()
     print(f"[kolesa] mobile sessions loaded: {len(sessions)}, active={session_manager.active_count()}")
+    print(f"[kolesa] crawlbase fallback: {'enabled' if crawlbase_client else 'disabled'}")
     listing_url = normalize_listing_url(args.listing_url)
     rows: list[dict[str, str]] = []
     resume_state = load_checkpoint(checkpoint_path)
@@ -1195,6 +1331,7 @@ def main() -> int:
                 rotator,
                 session_manager=session_manager,
                 max_session_attempts=max(1, int(args.phone_max_session_attempts)),
+                crawlbase_client=crawlbase_client,
             )
             rows.append(row)
             if live_db_writer:

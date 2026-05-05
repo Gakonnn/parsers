@@ -10,7 +10,7 @@
 ## Запуск
 
 ```bash
-/Users/gakon/PycharmProjects/olx/venv/bin/python /Users/gakon/PycharmProjects/olx/parsers_hub/server.py
+./venv/bin/python parsers_hub/server.py
 ```
 
 После запуска открой:
@@ -50,7 +50,7 @@ postgresql://postgres:postgres@127.0.0.1:5432/parsers
 
 Фронтенд не заменяет ваши существующие проекты. Он работает как control panel и запускает:
 
-- `/Users/gakon/PycharmProjects/olx/olx_scraper.py`
-- `/Users/gakon/PycharmProjects/olx/unified_sources/2gis/parser-2gis.py`
-- `/Users/gakon/PycharmProjects/olx/unified_sources/krisha/krisha_phone_parser.py`
-- `/Users/gakon/PycharmProjects/olx/unified_sources/kolesa/kolesa_phone_parser.py`
+- `olx_scraper.py`
+- `unified_sources/2gis/parser-2gis.py`
+- `unified_sources/krisha/krisha_phone_parser.py`
+- `unified_sources/kolesa/kolesa_phone_parser.py`

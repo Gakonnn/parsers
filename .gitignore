@@ -14,6 +14,22 @@ venv/
 parsers_hub/runs/
 unified_runs/
 *.log
+*.xlsx
+*.xls
+*.csv
+*.checkpoint.json
+!Data.2gis_рубрики.xlsx
+
+# Local cookies, proxy lists, and generated documents
+cookie.txt
+cookie.json
+*cookie*.txt
+*cookie*.json
+proxyscrape_premium_http_proxies.txt
+**/proxyscrape_premium_http_proxies.txt
+**/proxy_blacklist.txt
+*.docx
+*.pdf
 
 # Local env
 .env
@@ -21,3 +37,11 @@ unified_runs/
 # Optional heavy artifacts
 *.sqlite
 *.db
+
+# Frontend
+node_modules/
+.next/
+*.tsbuildinfo
+frontend/node_modules/
+frontend/.next/
+frontend/out/

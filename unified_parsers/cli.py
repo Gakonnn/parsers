@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 import time
@@ -11,6 +12,9 @@ from pathlib import Path
 from .postgres_sink import PostgresSinkError, persist_output_to_postgres
 from .registry import get_adapters
 from .reporting import MetricsCollector, RunReport, now_iso, refine_metrics_from_output, write_report
+
+
+DB_LOG_RUN_ID_RE = re.compile(r"\[db\].*\b(?:db_run_id|run_id)=([0-9a-fA-F-]{36})\b")
 
 
 def _project_root() -> Path:
@@ -126,6 +130,7 @@ def handle_run(args: argparse.Namespace) -> int:
     started_at_iso = now_iso()
     started_at_monotonic = time.monotonic()
     metrics = MetricsCollector()
+    live_db_run_id_from_log = ""
 
     process = subprocess.Popen(
         command,
@@ -140,6 +145,10 @@ def handle_run(args: argparse.Namespace) -> int:
     for line in process.stdout:
         print(line.rstrip("\n"))
         metrics.consume(line)
+        if not live_db_run_id_from_log:
+            live_match = DB_LOG_RUN_ID_RE.search(line)
+            if live_match:
+                live_db_run_id_from_log = live_match.group(1)
     exit_code = int(process.wait())
 
     processed, skipped, errors = metrics.finalize()
@@ -181,6 +190,8 @@ def handle_run(args: argparse.Namespace) -> int:
         and bool(database_url)
     )
     if is_olx_live_db_mode and exit_code == 0:
+        report.db_run_id = live_db_run_id_from_log
+        report.db_records = report.processed if live_db_run_id_from_log else 0
         print("[db] source=olx uses live per-record inserts inside olx_scraper")
     elif live_db_enabled and exit_code == 0:
         report.db_run_id = live_run_id

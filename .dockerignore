@@ -3,12 +3,33 @@
 .idea
 __pycache__
 *.pyc
+.venv/
 venv/
 .parsed
-*.xlsx
-!Data.2gis_рубрики.xlsx
-*.csv
-*.json
+
+# Runtime outputs
 parsers_hub/runs/
 unified_runs/
+*.xlsx
+!Data.2gis_рубрики.xlsx
+*.xls
+*.csv
+*.log
+*.checkpoint.json
+
+# Local secrets/state
+.env
+cookie.txt
+cookie.json
+*cookie*.txt
+*cookie*.json
+proxyscrape_premium_http_proxies.txt
+**/proxyscrape_premium_http_proxies.txt
+**/proxy_blacklist.txt
+
 .DS_Store
+node_modules/
+.next/
+frontend/node_modules/
+frontend/.next/
+frontend/out/

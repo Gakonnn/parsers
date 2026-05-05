@@ -1,0 +1,23 @@
+{
+  "name": "parsers-platform-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --webpack --hostname 0.0.0.0 --port 3000",
+    "build": "next build",
+    "start": "next start --hostname 0.0.0.0 --port 3000",
+    "start:standalone": "HOSTNAME=0.0.0.0 PORT=3000 node .next/standalone/server.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "^16.2.4",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.3",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
+    "typescript": "5.8.3"
+  }
+}
