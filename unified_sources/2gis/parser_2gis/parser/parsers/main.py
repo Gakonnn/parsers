@@ -248,8 +248,20 @@ class MainParser:
             item = items[0]
             if not isinstance(item, dict):
                 return None
-            item_id = item.get('id')
-            return str(item_id) if item_id is not None else None
+            candidate_parts: list[str] = []
+            for key in ('id', 'url', 'name', 'address_name'):
+                value = item.get(key)
+                if value:
+                    candidate_parts.append(str(value).strip())
+            org = item.get('org')
+            if isinstance(org, dict):
+                for key in ('id', 'name'):
+                    value = org.get(key)
+                    if value:
+                        candidate_parts.append(str(value).strip())
+            if not candidate_parts:
+                return None
+            return '|'.join(candidate_parts)
         except Exception:
             return None
 
