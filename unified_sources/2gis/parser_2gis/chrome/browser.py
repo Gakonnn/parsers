@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..common import wait_until_finished
@@ -30,7 +31,16 @@ class ChromeBrowser():
 
         logger.debug('Запуск Chrome Браузера.')
 
-        self._profile_path = tempfile.mkdtemp()
+        env_profile_dir = os.environ.get("PARSER_2GIS_PROFILE_DIR", "").strip()
+        env_preserve_profile = os.environ.get("PARSER_2GIS_PROFILE_PERSIST", "").strip().lower() in {"1", "true", "yes", "on"}
+        profile_path = chrome_options.profile_dir or (Path(env_profile_dir) if env_profile_dir else None)
+        self._preserve_profile = bool(chrome_options.preserve_profile or env_preserve_profile or profile_path)
+        if profile_path:
+            profile_path.mkdir(parents=True, exist_ok=True)
+            self._profile_path = str(profile_path)
+        else:
+            self._profile_path = tempfile.mkdtemp()
+            self._preserve_profile = False
         self._remote_port = free_port()
         self._chrome_cmd = [
             binary_path,
@@ -73,6 +83,8 @@ class ChromeBrowser():
         Returns:
             `True` on successful deletion, `False` on failure.
         """
+        if self._preserve_profile:
+            return True
         shutil.rmtree(self._profile_path, ignore_errors=True)
         profile_deleted = not os.path.isdir(self._profile_path)
         return profile_deleted
@@ -85,7 +97,7 @@ class ChromeBrowser():
         self._proc.terminate()
         self._proc.wait()
 
-        # Delete temporary profile
+        # Delete temporary profile only when it is not persistent.
         self._delete_profile()
 
     def __repr__(self) -> str:

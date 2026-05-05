@@ -27,8 +27,10 @@ class ChromeOptions(BaseModel):
         memory_size: Max V8's memory size.
     """
     binary_path: Optional[pathlib.Path] = None
+    profile_dir: Optional[pathlib.Path] = None
     start_maximized: bool = False
     headless: bool = False
     disable_images: bool = True
     silent_browser: bool = True
+    preserve_profile: bool = False
     memory_limit: PositiveInt = default_memory_limit()
