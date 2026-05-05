@@ -343,6 +343,10 @@ class MainParser:
                 setattr(writer, "_wrote_count", collected_records)
             except Exception:
                 pass
+            emit_progress()
+
+        def emit_progress() -> None:
+            logger.info("[progress] %s / %s", collected_records, self._options.max_records)
 
         def persist_checkpoint() -> None:
             _save_checkpoint(
@@ -447,6 +451,7 @@ class MainParser:
                             logger.debug('Дубликат организации (%s), пропуск.', item_id)
                             visited_links.add(link_href)
                             persist_checkpoint()
+                            emit_progress()
                             continue
                         if item_id:
                             seen_item_ids.add(item_id)
@@ -457,6 +462,7 @@ class MainParser:
                         consecutive_skips = 0
                         visited_links.add(link_href)
                         persist_checkpoint()
+                        emit_progress()
                     else:
                         consecutive_skips += 1
                         if resp and resp.get('status', 0) < 0:
@@ -474,6 +480,7 @@ class MainParser:
                             self._chrome_remote.wait(2)
                         visited_links.add(link_href)
                         persist_checkpoint()
+                        emit_progress()
 
                     # We've reached our limit, bail
                     if collected_records >= self._options.max_records:

@@ -33,7 +33,7 @@ class _WebState:
         self.logs: list[str] = []
         self.config = config
         self.auto_restart = True
-        self.auto_max_attempts = 12
+        self.auto_max_attempts = 30
         self.auto_probe_seconds = 12
         self.auto_first_parse_deadline = 5.0
         self.auto_min_records = 3
@@ -513,7 +513,7 @@ def web_app(urls: list[str] | None, output_path: str | None,
                 if format_form not in ('csv', 'xlsx', 'json'):
                     format_form = 'csv'
                 auto_restart = form_data.get('auto_restart', ['yes'])[0] == 'yes'
-                auto_max_attempts = int(form_data.get('auto_max_attempts', ['12'])[0] or '12')
+                auto_max_attempts = int(form_data.get('auto_max_attempts', ['30'])[0] or '30')
                 auto_probe_seconds = int(form_data.get('auto_probe_seconds', ['12'])[0] or '12')
                 auto_first_parse_deadline = float(form_data.get('auto_first_parse_deadline', ['5'])[0] or '5')
                 auto_min_records = int(form_data.get('auto_min_records', ['3'])[0] or '3')

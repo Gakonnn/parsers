@@ -87,11 +87,15 @@ def build_job_progress(
 def extract_progress_from_log(log_text: str) -> tuple[int, int]:
     current = 0
     total = 0
+    explicit_current = 0
+    explicit_total = 0
+    has_explicit_progress = False
     for line in (log_text or "").splitlines():
         progress_match = re.search(r"\[progress\]\s+(\d+)\s*/\s*(\d+)", line, re.IGNORECASE)
         if progress_match:
-            current = max(current, int(progress_match.group(1)))
-            total = max(total, int(progress_match.group(2)))
+            has_explicit_progress = True
+            explicit_current = max(explicit_current, int(progress_match.group(1)))
+            explicit_total = max(explicit_total, int(progress_match.group(2)))
             continue
 
         ratio_match = re.search(r"\[(\d+)\s*/\s*(\d+)\]", line)
@@ -114,6 +118,8 @@ def extract_progress_from_log(log_text: str) -> tuple[int, int]:
         if saved_match:
             current = max(current, int(saved_match.group(1)))
 
+    if has_explicit_progress:
+        return explicit_current, explicit_total
     return current, total
 
 
@@ -358,7 +364,7 @@ class JobManager:
             job.parser_key == "2gis"
             and env.get("PARSERS_HUB_2GIS_AUTO_RESTART", "true").strip().lower() in {"1", "true", "yes", "on"}
         )
-        auto_max_attempts = max(1, int(env.get("PARSERS_HUB_2GIS_AUTO_MAX_ATTEMPTS", "10")))
+        auto_max_attempts = max(1, int(env.get("PARSERS_HUB_2GIS_AUTO_MAX_ATTEMPTS", "30")))
         auto_probe_seconds = max(4, int(env.get("PARSERS_HUB_2GIS_AUTO_PROBE_SECONDS", "10")))
         auto_first_deadline = max(1.0, float(env.get("PARSERS_HUB_2GIS_AUTO_FIRST_PARSE_DEADLINE", "7")))
         auto_min_records = max(1, int(env.get("PARSERS_HUB_2GIS_AUTO_MIN_RECORDS", "3")))
