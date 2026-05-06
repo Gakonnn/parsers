@@ -34,11 +34,11 @@ class _WebState:
         self.config = config
         self.auto_restart = True
         self.auto_max_attempts = 30
-        self.auto_probe_seconds = 15
-        self.auto_first_parse_deadline = 10.0
-        self.auto_min_records = 1
+        self.auto_probe_seconds = 12
+        self.auto_first_parse_deadline = 5.0
+        self.auto_min_records = 3
         self.auto_error_budget = 1
-        self.auto_prewarm_delay = 5.0
+        self.auto_prewarm_delay = 2.5
         self.auto_current_attempt = 0
         self.attempt_started_at = 0.0
         self.attempt_parsed_events = 0
@@ -514,11 +514,11 @@ def web_app(urls: list[str] | None, output_path: str | None,
                     format_form = 'csv'
                 auto_restart = form_data.get('auto_restart', ['yes'])[0] == 'yes'
                 auto_max_attempts = int(form_data.get('auto_max_attempts', ['30'])[0] or '30')
-                auto_probe_seconds = int(form_data.get('auto_probe_seconds', ['15'])[0] or '15')
-                auto_first_parse_deadline = float(form_data.get('auto_first_parse_deadline', ['10'])[0] or '10')
-                auto_min_records = int(form_data.get('auto_min_records', ['1'])[0] or '1')
+                auto_probe_seconds = int(form_data.get('auto_probe_seconds', ['12'])[0] or '12')
+                auto_first_parse_deadline = float(form_data.get('auto_first_parse_deadline', ['5'])[0] or '5')
+                auto_min_records = int(form_data.get('auto_min_records', ['3'])[0] or '3')
                 auto_error_budget = int(form_data.get('auto_error_budget', ['1'])[0] or '1')
-                auto_prewarm_delay = float(form_data.get('auto_prewarm_delay', ['5.0'])[0] or '5.0')
+                auto_prewarm_delay = float(form_data.get('auto_prewarm_delay', ['2.5'])[0] or '2.5')
 
                 should_start = False
                 with state.lock:

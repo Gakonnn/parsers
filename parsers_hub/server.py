@@ -365,10 +365,10 @@ class JobManager:
             and env.get("PARSERS_HUB_2GIS_AUTO_RESTART", "true").strip().lower() in {"1", "true", "yes", "on"}
         )
         auto_max_attempts = max(30, int(env.get("PARSERS_HUB_2GIS_AUTO_MAX_ATTEMPTS", "30")))
-        auto_first_deadline = max(1.0, float(env.get("PARSERS_HUB_2GIS_AUTO_FIRST_PARSE_DEADLINE", "10")))
-        auto_min_records = max(1, int(env.get("PARSERS_HUB_2GIS_AUTO_MIN_RECORDS", "1")))
+        auto_probe_seconds = max(4, int(env.get("PARSERS_HUB_2GIS_AUTO_PROBE_SECONDS", "10")))
+        auto_first_deadline = max(1.0, float(env.get("PARSERS_HUB_2GIS_AUTO_FIRST_PARSE_DEADLINE", "7")))
+        auto_min_records = max(1, int(env.get("PARSERS_HUB_2GIS_AUTO_MIN_RECORDS", "3")))
         auto_error_budget = max(0, int(env.get("PARSERS_HUB_2GIS_AUTO_ERROR_BUDGET", "1")))
-        auto_probe_seconds = max(6, int(env.get("PARSERS_HUB_2GIS_AUTO_PROBE_SECONDS", "15")))
 
         process: subprocess.Popen[str] | None = None
         attempt = 0

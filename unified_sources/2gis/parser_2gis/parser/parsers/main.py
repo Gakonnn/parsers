@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import os
 import json
 import re
@@ -250,31 +249,19 @@ class MainParser:
             if not isinstance(item, dict):
                 return None
             candidate_parts: list[str] = []
-
-            def add_value(value: object) -> None:
-                if value is None:
-                    return
-                text = str(value).strip()
-                if text:
-                    candidate_parts.append(text.lower())
-
-            for key in ('id', 'url', 'name', 'address_name', 'type'):
-                add_value(item.get(key))
-
+            for key in ('id', 'url', 'name', 'address_name'):
+                value = item.get(key)
+                if value:
+                    candidate_parts.append(str(value).strip())
             org = item.get('org')
             if isinstance(org, dict):
                 for key in ('id', 'name'):
-                    add_value(org.get(key))
-
-            point = item.get('point')
-            if isinstance(point, dict):
-                add_value(point.get('lat'))
-                add_value(point.get('lon'))
-
+                    value = org.get(key)
+                    if value:
+                        candidate_parts.append(str(value).strip())
             if not candidate_parts:
                 return None
-            fingerprint = '|'.join(candidate_parts)
-            return hashlib.sha1(fingerprint.encode('utf-8')).hexdigest()
+            return '|'.join(candidate_parts)
         except Exception:
             return None
 
