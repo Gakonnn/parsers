@@ -94,21 +94,22 @@ export default function HomePage() {
   return (
     <main className="auth-page">
       <section className="hero-panel">
-        <div className="hero-topline">
-          <span className="brand-mark">P</span>
-          <span>ParserDesk</span>
-        </div>
-        <div className="hero-copy">
-          <span className="eyebrow">Commercial parser operations</span>
-          <h1>Кабинет для парсеров, который выглядит как рабочий продукт, а не временная админка.</h1>
-          <p>
-            Управление задачами, тарифами, пользователями, оплатами, уведомлениями и результатами PostgreSQL в одном аккуратном интерфейсе.
-          </p>
-        </div>
-        <div className="hero-metrics">
-          <div><strong>4</strong><span>источника</span></div>
-          <div><strong>live</strong><span>прогресс</span></div>
-          <div><strong>CSV/XLSX</strong><span>экспорт</span></div>
+        <div className="hero-stage" aria-hidden="true">
+          <div className="hero-glow hero-glow-a" />
+          <div className="hero-glow hero-glow-b" />
+          <div className="hero-grid" />
+          <div className="hero-card hero-card-a">
+            <span className="hero-card-label">Jobs</span>
+            <strong>Live queue</strong>
+          </div>
+          <div className="hero-card hero-card-b">
+            <span className="hero-card-label">DB</span>
+            <strong>Results store</strong>
+          </div>
+          <div className="hero-card hero-card-c">
+            <span className="hero-card-label">Export</span>
+            <strong>CSV / XLSX</strong>
+          </div>
         </div>
       </section>
 
