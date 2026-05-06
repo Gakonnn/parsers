@@ -4,6 +4,7 @@ import html
 import json
 import mimetypes
 import os
+import re
 import queue
 import threading
 import time
@@ -34,11 +35,11 @@ class _WebState:
         self.config = config
         self.auto_restart = True
         self.auto_max_attempts = 30
-        self.auto_probe_seconds = 15
-        self.auto_first_parse_deadline = 10.0
-        self.auto_min_records = 1
-        self.auto_error_budget = 1
-        self.auto_prewarm_delay = 5.0
+        self.auto_probe_seconds = 18
+        self.auto_first_parse_deadline = 8.0
+        self.auto_min_records = 3
+        self.auto_error_budget = 0
+        self.auto_prewarm_delay = 6.0
         self.auto_current_attempt = 0
         self.attempt_started_at = 0.0
         self.attempt_parsed_events = 0
@@ -52,10 +53,13 @@ class _WebState:
             except queue.Empty:
                 break
             self.logs.append(message)
-            if 'Парсинг [' in message and self.attempt_started_at > 0:
-                self.attempt_parsed_events += 1
-                if self.attempt_first_parse_delay is None:
+            progress_match = re.search(r'\[progress\]\s+(\d+)\s*/\s*(\d+)', message, re.IGNORECASE)
+            if progress_match and self.attempt_started_at > 0:
+                self.attempt_parsed_events = max(self.attempt_parsed_events, int(progress_match.group(1)))
+                if self.attempt_first_parse_delay is None and int(progress_match.group(1)) > 0:
                     self.attempt_first_parse_delay = max(0.0, time.time() - self.attempt_started_at)
+            elif 'Парсинг [' in message and self.attempt_started_at > 0 and self.attempt_first_parse_delay is None:
+                self.attempt_first_parse_delay = max(0.0, time.time() - self.attempt_started_at)
             if self.attempt_started_at > 0 and ('Данные не получены' in message or 'ERROR' in message):
                 self.attempt_error_events += 1
 
@@ -514,11 +518,11 @@ def web_app(urls: list[str] | None, output_path: str | None,
                     format_form = 'csv'
                 auto_restart = form_data.get('auto_restart', ['yes'])[0] == 'yes'
                 auto_max_attempts = int(form_data.get('auto_max_attempts', ['30'])[0] or '30')
-                auto_probe_seconds = int(form_data.get('auto_probe_seconds', ['15'])[0] or '15')
-                auto_first_parse_deadline = float(form_data.get('auto_first_parse_deadline', ['10'])[0] or '10')
-                auto_min_records = int(form_data.get('auto_min_records', ['1'])[0] or '1')
-                auto_error_budget = int(form_data.get('auto_error_budget', ['1'])[0] or '1')
-                auto_prewarm_delay = float(form_data.get('auto_prewarm_delay', ['5.0'])[0] or '5.0')
+                auto_probe_seconds = int(form_data.get('auto_probe_seconds', ['18'])[0] or '18')
+                auto_first_parse_deadline = float(form_data.get('auto_first_parse_deadline', ['8'])[0] or '8')
+                auto_min_records = int(form_data.get('auto_min_records', ['3'])[0] or '3')
+                auto_error_budget = int(form_data.get('auto_error_budget', ['0'])[0] or '0')
+                auto_prewarm_delay = float(form_data.get('auto_prewarm_delay', ['6.0'])[0] or '6.0')
 
                 should_start = False
                 with state.lock:
