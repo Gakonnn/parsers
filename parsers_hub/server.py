@@ -429,10 +429,10 @@ class JobManager:
             and env.get("PARSERS_HUB_2GIS_AUTO_RESTART", "true").strip().lower() in {"1", "true", "yes", "on"}
         )
         auto_max_attempts = max(30, int(env.get("PARSERS_HUB_2GIS_AUTO_MAX_ATTEMPTS", "30")))
-        auto_first_deadline = max(1.0, float(env.get("PARSERS_HUB_2GIS_AUTO_FIRST_PARSE_DEADLINE", "8")))
-        auto_min_records = max(1, int(env.get("PARSERS_HUB_2GIS_AUTO_MIN_RECORDS", "3")))
-        auto_error_budget = max(0, int(env.get("PARSERS_HUB_2GIS_AUTO_ERROR_BUDGET", "0")))
-        auto_probe_seconds = max(6, int(env.get("PARSERS_HUB_2GIS_AUTO_PROBE_SECONDS", "18")))
+        auto_first_deadline = max(1.0, float(env.get("PARSERS_HUB_2GIS_AUTO_FIRST_PARSE_DEADLINE", "10")))
+        auto_min_records = max(1, int(env.get("PARSERS_HUB_2GIS_AUTO_MIN_RECORDS", "1")))
+        auto_error_budget = max(0, int(env.get("PARSERS_HUB_2GIS_AUTO_ERROR_BUDGET", "1")))
+        auto_probe_seconds = max(6, int(env.get("PARSERS_HUB_2GIS_AUTO_PROBE_SECONDS", "15")))
 
         process: subprocess.Popen[str] | None = None
         attempt = 0
@@ -482,14 +482,10 @@ class JobManager:
                 if not line:
                     break
                 self._append_log(job, line)
-                progress_match = re.search(r"\[progress\]\s+(\d+)\s*/\s*(\d+)", line, re.IGNORECASE)
-                if progress_match:
-                    progress_current = max(0, int(progress_match.group(1)))
-                    parsed_count = max(parsed_count, progress_current)
-                    if progress_current > 0 and first_parse_delay is None:
+                if "Парсинг [" in line:
+                    parsed_count += 1
+                    if first_parse_delay is None:
                         first_parse_delay = time.monotonic() - probe_start
-                elif "Парсинг [" in line and first_parse_delay is None:
-                    first_parse_delay = time.monotonic() - probe_start
                 if "Данные не получены" in line or "ERROR" in line:
                     error_count += 1
 
