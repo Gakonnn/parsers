@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import hashlib
 import os
 import re
 import select
@@ -151,7 +150,6 @@ ROOT_DIR = Path(__file__).resolve().parent
 STATIC_DIR = ROOT_DIR / "static"
 RUNS_DIR = ROOT_DIR / "runs"
 RECOVERY_DIR = RUNS_DIR / "_recovery"
-GIS_STABLE_PROFILE_ROOT = RUNS_DIR / "2gis" / "stable_profiles"
 PROJECT_ROOT_RAW = os.environ.get("PARSERS_PROJECT_ROOT", "").strip()
 OLX_DIR = Path(PROJECT_ROOT_RAW).resolve() if PROJECT_ROOT_RAW else ROOT_DIR.parent.resolve()
 UNIFIED_SOURCES_DIR = OLX_DIR / "unified_sources"
@@ -195,60 +193,6 @@ def resolve_python_bin(source_dir: Path) -> str:
     if source_venv.exists():
         return str(source_venv)
     return str(DEFAULT_PYTHON_BIN)
-
-
-def _command_value_after(command: list[str], flag: str) -> str:
-    for index, part in enumerate(command):
-        if part == flag and index + 1 < len(command):
-            return str(command[index + 1]).strip()
-    return ""
-
-
-def _stable_profile_key(search_url: str) -> str:
-    normalized = search_url.strip()
-    if not normalized:
-        normalized = "default"
-    return hashlib.sha1(normalized.encode("utf-8")).hexdigest()[:12]
-
-
-def _read_json_file(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-    return payload if isinstance(payload, dict) else {}
-
-
-def _write_json_file(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
-    tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp_path.replace(path)
-
-
-def _load_2gis_stable_profile(profile_key: str | None = None) -> dict[str, Any]:
-    payload = {}
-    if profile_key:
-        payload = _read_json_file(GIS_STABLE_PROFILE_ROOT / profile_key / "stable_start.json")
-    elif GIS_STABLE_PROFILE_ROOT.exists():
-        candidates = sorted(GIS_STABLE_PROFILE_ROOT.glob("*/stable_start.json"), reverse=True)
-        if candidates:
-            payload = _read_json_file(candidates[0])
-    if not payload:
-        return {}
-    profile_dir = str(payload.get("profile_dir", "")).strip()
-    if profile_dir and not Path(profile_dir).exists():
-        payload["profile_dir"] = str(Path(profile_dir))
-    return payload
-
-
-def _save_2gis_stable_profile(profile_key: str, payload: dict[str, Any]) -> None:
-    profile_dir = GIS_STABLE_PROFILE_ROOT / profile_key / "chrome"
-    meta_path = GIS_STABLE_PROFILE_ROOT / profile_key / "stable_start.json"
-    payload = {**payload, "profile_dir": str(profile_dir), "saved_at": utc_now()}
-    _write_json_file(meta_path, payload)
 
 
 @dataclass
@@ -415,14 +359,6 @@ class JobManager:
 
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
-        if job.parser_key == "2gis":
-            search_url = _command_value_after(job.command, "--search-url")
-            profile_key = _stable_profile_key(search_url)
-            stable_profile = _load_2gis_stable_profile(profile_key)
-            warmup_delay = stable_profile.get("warmup_delay", 5.0)
-            env["PARSER_2GIS_PROFILE_DIR"] = str(GIS_STABLE_PROFILE_ROOT / profile_key / "chrome")
-            env["PARSER_2GIS_PROFILE_PERSIST"] = "1"
-            env["PARSER_2GIS_PREWARM_DELAY_SEC"] = str(warmup_delay)
 
         auto_enabled = (
             job.parser_key == "2gis"
@@ -508,21 +444,6 @@ class JobManager:
                 break
             if stable:
                 self._append_log(job, f"[auto] Стабильный старт найден на попытке {attempt}.\n")
-                if job.parser_key == "2gis":
-                    search_url = _command_value_after(job.command, "--search-url")
-                    profile_key = _stable_profile_key(search_url)
-                    _save_2gis_stable_profile(
-                        profile_key,
-                        {
-                            "warmup_delay": float(env.get("PARSER_2GIS_PREWARM_DELAY_SEC", "5.0")),
-                            "probe_seconds": auto_probe_seconds,
-                            "first_deadline": auto_first_deadline,
-                            "min_records": auto_min_records,
-                            "error_budget": auto_error_budget,
-                            "last_stable_attempt": attempt,
-                            "last_stable_job_id": job.job_id,
-                        }
-                    )
                 break
             if attempt >= auto_max_attempts:
                 self._append_log(job, "[auto] Лимит попыток исчерпан, продолжаю последний запуск.\n")

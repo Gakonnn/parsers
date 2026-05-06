@@ -8,7 +8,6 @@ import pydantic
 
 from .common import GUI_ENABLED, report_from_validation_error, unwrap_dot_dict
 from .config import Configuration
-from .paths import user_path
 from .version import version
 from .cli import cli_app
 from .gui import gui_app
@@ -172,11 +171,6 @@ def main() -> None:
     """Entry point."""
     # Parse command line arguments
     args, command_line_config = parse_arguments()
-
-    if not os.environ.get("PARSER_2GIS_PROFILE_DIR", "").strip():
-        default_profile_dir = user_path(is_config=False) / "stable_profiles" / "default" / "chrome"
-        os.environ["PARSER_2GIS_PROFILE_DIR"] = str(default_profile_dir)
-        os.environ.setdefault("PARSER_2GIS_PROFILE_PERSIST", "1")
 
     if args.web:
         # Load user config and merge it with one created by command line arguments.

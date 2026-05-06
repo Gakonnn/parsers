@@ -40,13 +40,6 @@ def _remove_checkpoint(path: Path) -> None:
     except Exception:  # noqa: BLE001
         pass
 
-
-def _canonical_href(href: str) -> str:
-    parsed = urllib.parse.urlsplit(href)
-    if parsed.scheme or parsed.netloc:
-        return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
-    return urllib.parse.urlunsplit(("", "", parsed.path, "", ""))
-
 if TYPE_CHECKING:
     from ...chrome import ChromeOptions
     from ...chrome.dom import DOMNode
@@ -347,7 +340,7 @@ class MainParser:
             except Exception:
                 seen_item_ids = set()
             try:
-                visited_links = {_canonical_href(str(item)) for item in resume_state.get("visited_links", []) if item}
+                visited_links = {str(item) for item in resume_state.get("visited_links", []) if item}
             except Exception:
                 visited_links = set()
             try:
@@ -404,13 +397,12 @@ class MainParser:
             link_addresses = set()
             for link in links:
                 href = link.attributes['href']
-                href_key = _canonical_href(href)
-                if href_key in link_addresses:
+                if href in link_addresses:
                     continue
-                if href_key in visited_links:
+                if href in visited_links:
                     continue
                 unique_links.append(link)
-                link_addresses.add(href_key)
+                link_addresses.add(href)
             return unique_links
 
         consecutive_skips = 0
@@ -427,7 +419,6 @@ class MainParser:
                 # Iterate through gathered links
                 link_hrefs = [link.attributes['href'] for link in links if 'href' in link.attributes]
                 for link_href in link_hrefs:
-                    link_key = _canonical_href(link_href)
                     resp = None
                     click_error = None
                     doc = None
@@ -484,7 +475,7 @@ class MainParser:
                         item_id = self._extract_item_id(doc)
                         if item_id and item_id in seen_item_ids:
                             logger.debug('Дубликат организации (%s), пропуск.', item_id)
-                            visited_links.add(link_key)
+                            visited_links.add(link_href)
                             persist_checkpoint()
                             emit_progress()
                             continue
@@ -495,7 +486,7 @@ class MainParser:
                         writer.write(doc)
                         collected_records += 1
                         consecutive_skips = 0
-                        visited_links.add(link_key)
+                        visited_links.add(link_href)
                         persist_checkpoint()
                         emit_progress()
                     else:
@@ -513,7 +504,7 @@ class MainParser:
                         if consecutive_skips >= 3:
                             logger.warning('Серия пропусков (%s), пауза 2с для стабилизации.', consecutive_skips)
                             self._chrome_remote.wait(2)
-                        visited_links.add(link_key)
+                        visited_links.add(link_href)
                         persist_checkpoint()
                         emit_progress()
 
