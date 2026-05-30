@@ -437,6 +437,10 @@ class JobManager:
 
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
+        if job.parser_key == "2gis":
+            profile_dir = RUNS_DIR / "_chrome_profiles" / "2gis" / job.job_id
+            profile_dir.mkdir(parents=True, exist_ok=True)
+            env.setdefault("PARSER_2GIS_CHROME_PROFILE_DIR", str(profile_dir))
 
         auto_enabled = (
             job.parser_key == "2gis"
@@ -483,11 +487,13 @@ class JobManager:
             parsed_count = 0
             error_count = 0
             first_parse_delay: float | None = None
+            stable_seen = False
+            stable_reason = ""
             probe_start = time.monotonic()
             attempt_lines: list[str] = []
 
             def record_probe_line(line: str) -> None:
-                nonlocal parsed_count, error_count, first_parse_delay
+                nonlocal parsed_count, error_count, first_parse_delay, stable_seen, stable_reason
                 attempt_lines.append(line)
                 self._append_log(job, line)
                 if "Парсинг [" in line:
@@ -496,6 +502,15 @@ class JobManager:
                         first_parse_delay = time.monotonic() - probe_start
                 if "Данные не получены" in line or "ERROR" in line:
                     error_count += 1
+                if (
+                    not stable_seen
+                    and first_parse_delay is not None
+                    and first_parse_delay <= auto_first_deadline
+                    and parsed_count >= auto_min_records
+                    and error_count <= auto_error_budget
+                ):
+                    stable_seen = True
+                    stable_reason = "early-success"
 
             while time.monotonic() - probe_start < auto_probe_seconds:
                 if job.stop_requested:
@@ -511,6 +526,8 @@ class JobManager:
                 if not line:
                     break
                 record_probe_line(line)
+                if stable_seen:
+                    break
 
             elapsed = max(0.001, time.monotonic() - probe_start)
             rps = parsed_count / elapsed
@@ -528,16 +545,20 @@ class JobManager:
                 and ("Парсинг завершён" in attempt_log or "[report]" in attempt_log)
             )
             stable = (
-                first_parse_delay is not None
-                and first_parse_delay <= auto_first_deadline
-                and parsed_count >= auto_min_records
-                and error_count <= auto_error_budget
+                stable_seen
+                or (
+                    first_parse_delay is not None
+                    and first_parse_delay <= auto_first_deadline
+                    and parsed_count >= auto_min_records
+                    and error_count <= auto_error_budget
+                )
             )
             self._append_log(
                 job,
                 f"[auto] Итог попытки {attempt}: records={parsed_count}, "
                 f"first={round(first_parse_delay, 2) if first_parse_delay is not None else 'none'}s, "
-                f"rps={round(rps, 2)}, errors={error_count}, min_records={auto_min_records}\n",
+                f"rps={round(rps, 2)}, errors={error_count}, min_records={auto_min_records}"
+                f"{', stable=' + stable_reason if stable_reason else ''}\n",
             )
 
             if job.stop_requested:

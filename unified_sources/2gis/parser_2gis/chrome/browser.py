@@ -30,7 +30,21 @@ class ChromeBrowser():
 
         logger.debug('Запуск Chrome Браузера.')
 
-        self._profile_path = tempfile.mkdtemp()
+        profile_path = os.environ.get('PARSER_2GIS_CHROME_PROFILE_DIR', '').strip()
+        self._delete_profile_on_close = not profile_path
+        if profile_path:
+            self._profile_path = profile_path
+            os.makedirs(self._profile_path, exist_ok=True)
+            for lock_name in ('SingletonCookie', 'SingletonLock', 'SingletonSocket'):
+                lock_path = os.path.join(self._profile_path, lock_name)
+                try:
+                    os.unlink(lock_path)
+                except FileNotFoundError:
+                    pass
+                except OSError:
+                    logger.debug('Не удалось удалить lock-файл профиля Chrome: %s', lock_path)
+        else:
+            self._profile_path = tempfile.mkdtemp()
         self._remote_port = free_port()
         self._chrome_cmd = [
             binary_path,
@@ -85,8 +99,10 @@ class ChromeBrowser():
         self._proc.terminate()
         self._proc.wait()
 
-        # Delete temporary profile
-        self._delete_profile()
+        # Delete only temporary profiles. Stable profiles are reused between
+        # auto-restart attempts of the same parser job.
+        if self._delete_profile_on_close:
+            self._delete_profile()
 
     def __repr__(self) -> str:
         classname = self.__class__.__name__
