@@ -131,10 +131,15 @@ class MainParser:
         '''
         self._chrome_remote.add_start_script(xhr_script)
 
-    @wait_until_finished(timeout=120)
+    @wait_until_finished(timeout=5, throw_exception=False)
     def _wait_requests_finished(self) -> bool:
-        """Wait for all pending requests."""
-        return self._chrome_remote.execute_script('window.openHTTPs == 0')
+        """Wait briefly for pending 2GIS XHRs.
+
+        2GIS keeps some background requests open on server IPs. Waiting for
+        every request to finish can stall a page transition for tens of
+        seconds, while the organization links are already usable.
+        """
+        return bool(self._chrome_remote.execute_script('window.openHTTPs == undefined || window.openHTTPs <= 0'))
 
     def _get_available_pages(self) -> dict[int, DOMNode]:
         """Get available pages to navigate."""
