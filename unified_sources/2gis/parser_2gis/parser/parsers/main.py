@@ -61,6 +61,9 @@ class MainParser:
                  parser_options: ParserOptions) -> None:
         self._options = parser_options
         self._url = url
+        self._item_attempts = max(1, int(os.environ.get('PARSER_2GIS_ITEM_ATTEMPTS', '2')))
+        self._response_timeout = max(0.5, float(os.environ.get('PARSER_2GIS_RESPONSE_TIMEOUT_SEC', '3')))
+        self._body_timeout = max(0.5, float(os.environ.get('PARSER_2GIS_BODY_TIMEOUT_SEC', '3')))
 
         # "Catalog Item Document" response pattern.
         self._item_response_pattern = (
@@ -410,7 +413,7 @@ class MainParser:
                     resp = None
                     click_error = None
                     doc = None
-                    for _ in range(3):  # 3 attempts to get response
+                    for _ in range(self._item_attempts):
                         # Drop stale buffered responses before current click.
                         if hasattr(self._chrome_remote, 'clear_response_queue'):
                             self._chrome_remote.clear_response_queue(self._item_response_pattern)
@@ -439,18 +442,26 @@ class MainParser:
                             self._chrome_remote.wait(self._options.delay_between_clicks / 1000)
 
                         # Gather response and collect useful payload.
-                        resp = self._chrome_remote.wait_response(self._item_response_pattern)
+                        resp = self._chrome_remote.wait_response(
+                            self._item_response_pattern,
+                            timeout=self._response_timeout,
+                        )
 
                         # If request is failed - repeat.
                         if not resp or resp['status'] < 0:
                             continue
 
                         # Get response body and validate payload.
-                        data = self._chrome_remote.get_response_body(resp, timeout=10)
+                        data = self._chrome_remote.get_response_body(resp, timeout=self._body_timeout)
                         try:
                             parsed_doc = json.loads(data)
                         except json.JSONDecodeError:
                             logger.error('Сервер вернул некорректный JSON документ: "%s", пропуск позиции.', data)
+                            if not str(data or '').strip():
+                                # Empty bodies usually mean CDP/2GIS returned an unusable
+                                # response for this card; retrying the same link is slow
+                                # and almost always gives the same result on server IPs.
+                                break
                             continue
 
                         if self._valid_catalog_document(parsed_doc):

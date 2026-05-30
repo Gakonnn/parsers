@@ -88,7 +88,7 @@ class InBuildingParser(MainParser):
             # Iterate through gathered links
             for link in links:
                 resp = None
-                for _ in range(3):  # 3 attempts to get response
+                for _ in range(self._item_attempts):
                     # Drop stale buffered responses before current click.
                     self._chrome_remote.clear_response_queue(self._item_response_pattern)
 
@@ -108,7 +108,10 @@ class InBuildingParser(MainParser):
                         self._chrome_remote.wait(self._options.delay_between_clicks / 1000)
 
                     # Gather response and collect useful payload.
-                    resp = self._chrome_remote.wait_response(self._item_response_pattern)
+                    resp = self._chrome_remote.wait_response(
+                        self._item_response_pattern,
+                        timeout=self._response_timeout,
+                    )
 
                     # If request is failed - repeat, otherwise go further.
                     if resp and resp['status'] >= 0:
@@ -116,7 +119,7 @@ class InBuildingParser(MainParser):
 
                 # Get response body data
                 if resp and resp['status'] >= 0:
-                    data = self._chrome_remote.get_response_body(resp, timeout=10) if resp else None
+                    data = self._chrome_remote.get_response_body(resp, timeout=self._body_timeout) if resp else None
 
                     try:
                         doc = json.loads(data)
