@@ -146,6 +146,84 @@ def extract_total_from_payload(payload: dict[str, Any]) -> int:
     return 0
 
 
+def command_arg_value(command: list[str], flag: str) -> str:
+    try:
+        index = command.index(flag)
+    except ValueError:
+        return ""
+    if index + 1 >= len(command):
+        return ""
+    return str(command[index + 1])
+
+
+RUN_ID_RE = re.compile(r"\brun_id=([0-9a-fA-F-]{36})\b")
+
+
+def extract_run_ids(text: str) -> list[str]:
+    seen: set[str] = set()
+    run_ids: list[str] = []
+    for match in RUN_ID_RE.finditer(text or ""):
+        run_id = match.group(1)
+        if run_id in seen:
+            continue
+        seen.add(run_id)
+        run_ids.append(run_id)
+    return run_ids
+
+
+def cleanup_2gis_unstable_attempt(command: list[str], attempt_log: str, database_url: str) -> tuple[int, int]:
+    """Remove partial state from an auto-restart probe attempt.
+
+    2GIS writes live DB rows and checkpoints before we know whether the start is
+    stable. If we keep that state, the next attempt resumes from a bad probe and
+    progress/DB counts become inflated. A failed probe must be disposable.
+    """
+    removed_files = 0
+    output_value = command_arg_value(command, "--output")
+    if output_value:
+        output_path = Path(output_value)
+        candidates = [
+            output_path,
+            output_path.with_suffix(output_path.suffix + ".checkpoint.json"),
+            output_path.with_suffix(".csv"),
+            output_path.with_suffix(".converted.xlsx"),
+            output_path.with_suffix(".deduplicated.csv"),
+            output_path.with_suffix(".col_cleaned.csv"),
+        ]
+        for path in candidates:
+            try:
+                if path.exists():
+                    path.unlink()
+                    removed_files += 1
+            except OSError:
+                pass
+
+    deleted_runs = 0
+    run_ids = extract_run_ids(attempt_log)
+    if database_url and run_ids and psycopg2 is not None:
+        try:
+            with psycopg2.connect(database_url) as conn:
+                with conn.cursor() as cur:
+                    for run_id in run_ids:
+                        cur.execute("DELETE FROM parser_runs WHERE run_id = %s::uuid", (run_id,))
+                        deleted_runs += cur.rowcount
+        except Exception:
+            deleted_runs = 0
+
+    return removed_files, deleted_runs
+
+
+def is_clean_empty_2gis_result(process_return_code: int | None, attempt_log: str, parsed_count: int, error_count: int) -> bool:
+    if process_return_code != 0 or parsed_count != 0 or error_count != 0:
+        return False
+    empty_markers = (
+        "Точных совпадений нет",
+        "Не найдено",
+        "processed=0",
+    )
+    return any(marker in attempt_log for marker in empty_markers)
+
+
 ROOT_DIR = Path(__file__).resolve().parent
 STATIC_DIR = ROOT_DIR / "static"
 RUNS_DIR = ROOT_DIR / "runs"
@@ -365,10 +443,11 @@ class JobManager:
             and env.get("PARSERS_HUB_2GIS_AUTO_RESTART", "true").strip().lower() in {"1", "true", "yes", "on"}
         )
         auto_max_attempts = max(30, int(env.get("PARSERS_HUB_2GIS_AUTO_MAX_ATTEMPTS", "30")))
-        auto_probe_seconds = max(4, int(env.get("PARSERS_HUB_2GIS_AUTO_PROBE_SECONDS", "10")))
-        auto_first_deadline = max(1.0, float(env.get("PARSERS_HUB_2GIS_AUTO_FIRST_PARSE_DEADLINE", "7")))
-        auto_min_records = max(1, int(env.get("PARSERS_HUB_2GIS_AUTO_MIN_RECORDS", "3")))
-        auto_error_budget = max(0, int(env.get("PARSERS_HUB_2GIS_AUTO_ERROR_BUDGET", "1")))
+        auto_probe_seconds = max(6, int(env.get("PARSERS_HUB_2GIS_AUTO_PROBE_SECONDS", "12")))
+        auto_first_deadline = max(1.0, float(env.get("PARSERS_HUB_2GIS_AUTO_FIRST_PARSE_DEADLINE", "9")))
+        auto_min_records = max(1, int(env.get("PARSERS_HUB_2GIS_AUTO_MIN_RECORDS", "2")))
+        auto_error_budget = max(0, int(env.get("PARSERS_HUB_2GIS_AUTO_ERROR_BUDGET", "0")))
+        job_database_url = command_arg_value(job.command, "--database-url") or DEFAULT_DATABASE_URL
 
         process: subprocess.Popen[str] | None = None
         attempt = 0
@@ -405,18 +484,11 @@ class JobManager:
             error_count = 0
             first_parse_delay: float | None = None
             probe_start = time.monotonic()
+            attempt_lines: list[str] = []
 
-            while time.monotonic() - probe_start < auto_probe_seconds:
-                if job.stop_requested:
-                    break
-                if process.poll() is not None:
-                    break
-                ready, _, _ = select.select([process.stdout], [], [], 0.5)
-                if not ready:
-                    continue
-                line = process.stdout.readline()
-                if not line:
-                    break
+            def record_probe_line(line: str) -> None:
+                nonlocal parsed_count, error_count, first_parse_delay
+                attempt_lines.append(line)
                 self._append_log(job, line)
                 if "Парсинг [" in line:
                     parsed_count += 1
@@ -425,8 +497,36 @@ class JobManager:
                 if "Данные не получены" in line or "ERROR" in line:
                     error_count += 1
 
+            while time.monotonic() - probe_start < auto_probe_seconds:
+                if job.stop_requested:
+                    break
+                if process.poll() is not None:
+                    for remaining_line in process.stdout:
+                        record_probe_line(remaining_line)
+                    break
+                ready, _, _ = select.select([process.stdout], [], [], 0.5)
+                if not ready:
+                    continue
+                line = process.stdout.readline()
+                if not line:
+                    break
+                record_probe_line(line)
+
             elapsed = max(0.001, time.monotonic() - probe_start)
             rps = parsed_count / elapsed
+            process_return_code = process.poll()
+            attempt_log = "".join(attempt_lines)
+            clean_empty_result = is_clean_empty_2gis_result(
+                process_return_code,
+                attempt_log,
+                parsed_count,
+                error_count,
+            )
+            clean_finished_result = (
+                process_return_code == 0
+                and error_count <= auto_error_budget
+                and ("Парсинг завершён" in attempt_log or "[report]" in attempt_log)
+            )
             stable = (
                 first_parse_delay is not None
                 and first_parse_delay <= auto_first_deadline
@@ -442,6 +542,15 @@ class JobManager:
 
             if job.stop_requested:
                 break
+            if clean_empty_result:
+                self._append_log(
+                    job,
+                    "[auto] 2GIS вернул пустую выдачу, не перезапускаю этот запрос.\n",
+                )
+                break
+            if clean_finished_result:
+                self._append_log(job, "[auto] 2GIS завершил короткий запуск без ошибок.\n")
+                break
             if stable:
                 self._append_log(job, f"[auto] Стабильный старт найден на попытке {attempt}.\n")
                 break
@@ -452,6 +561,16 @@ class JobManager:
             self._append_log(job, "[auto] Нестабильный старт, перезапуск.\n")
             self._terminate_process_group(process)
             process.wait(timeout=10)
+            removed_files, deleted_runs = cleanup_2gis_unstable_attempt(
+                job.command,
+                attempt_log,
+                job_database_url,
+            )
+            if removed_files or deleted_runs:
+                self._append_log(
+                    job,
+                    f"[auto] Очищена неудачная попытка: files={removed_files}, db_runs={deleted_runs}.\n",
+                )
             with self._lock:
                 if job.process is process:
                     job.process = None

@@ -393,6 +393,7 @@ class MainParser:
             return unique_links
 
         consecutive_skips = 0
+        max_consecutive_skips = max(0, int(os.environ.get('PARSER_2GIS_MAX_CONSECUTIVE_SKIPS_PER_PAGE', '6')))
 
         while True:
             # Wait all 2GIS requests get finished
@@ -494,6 +495,13 @@ class MainParser:
                         visited_links.add(link_href)
                         persist_checkpoint()
                         emit_progress()
+                        if max_consecutive_skips and consecutive_skips >= max_consecutive_skips:
+                            logger.warning(
+                                'Слишком много пропусков подряд (%s), перехожу к следующей странице выдачи.',
+                                consecutive_skips,
+                            )
+                            consecutive_skips = 0
+                            break
 
                     # We've reached our limit, bail
                     if collected_records >= self._options.max_records:
