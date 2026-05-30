@@ -61,7 +61,8 @@ class MainParser:
                  parser_options: ParserOptions) -> None:
         self._options = parser_options
         self._url = url
-        self._item_attempts = max(1, int(os.environ.get('PARSER_2GIS_ITEM_ATTEMPTS', '2')))
+        self._item_attempts = max(1, int(os.environ.get('PARSER_2GIS_ITEM_ATTEMPTS', '1')))
+        self._click_timeout = max(0.5, float(os.environ.get('PARSER_2GIS_CLICK_TIMEOUT_SEC', '2')))
         self._response_timeout = max(0.5, float(os.environ.get('PARSER_2GIS_RESPONSE_TIMEOUT_SEC', '3')))
         self._body_timeout = max(0.5, float(os.environ.get('PARSER_2GIS_BODY_TIMEOUT_SEC', '3')))
 
@@ -432,7 +433,7 @@ class MainParser:
                         # Click the link to provoke request
                         # with a auth key and secret arguments
                         try:
-                            self._chrome_remote.perform_click(link)
+                            self._chrome_remote.perform_click(link, timeout=self._click_timeout)
                         except Exception as e:
                             # DOM could be re-rendered between snapshot and click,
                             # skip this attempt and try again.

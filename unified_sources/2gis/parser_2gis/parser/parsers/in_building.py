@@ -95,7 +95,7 @@ class InBuildingParser(MainParser):
                     # Click the link to provoke request
                     # with a auth key and secret arguments
                     try:
-                        self._chrome_remote.perform_click(link)
+                        self._chrome_remote.perform_click(link, timeout=self._click_timeout)
                     except Exception:
                         # DOM could be re-rendered between snapshot and click,
                         # skip this attempt and try again.
