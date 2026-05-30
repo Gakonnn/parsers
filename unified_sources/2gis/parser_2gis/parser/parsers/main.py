@@ -393,7 +393,7 @@ class MainParser:
             return unique_links
 
         consecutive_skips = 0
-        max_consecutive_skips = max(0, int(os.environ.get('PARSER_2GIS_MAX_CONSECUTIVE_SKIPS_PER_PAGE', '6')))
+        max_consecutive_skips = max(0, int(os.environ.get('PARSER_2GIS_MAX_CONSECUTIVE_SKIPS_PER_PAGE', '3')))
 
         while True:
             # Wait all 2GIS requests get finished
@@ -487,11 +487,6 @@ class MainParser:
                         else:
                             logger.error('Данные не получены, пропуск позиции.')
 
-                        # If server starts rejecting/breaking requests in a row,
-                        # back off a little and continue.
-                        if consecutive_skips >= 3:
-                            logger.warning('Серия пропусков (%s), пауза 2с для стабилизации.', consecutive_skips)
-                            self._chrome_remote.wait(2)
                         visited_links.add(link_href)
                         persist_checkpoint()
                         emit_progress()
@@ -502,6 +497,11 @@ class MainParser:
                             )
                             consecutive_skips = 0
                             break
+                        # If server starts rejecting/breaking requests in a row,
+                        # back off a little and continue.
+                        if consecutive_skips >= 3:
+                            logger.warning('Серия пропусков (%s), пауза 2с для стабилизации.', consecutive_skips)
+                            self._chrome_remote.wait(2)
 
                     # We've reached our limit, bail
                     if collected_records >= self._options.max_records:
