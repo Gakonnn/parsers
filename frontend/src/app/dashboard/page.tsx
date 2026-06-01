@@ -31,7 +31,7 @@ export default function DashboardPage() {
   const recordsPercent = usage ? percent(usage.records_used, usage.subscription.plan.max_records_per_month) : 0;
 
   return (
-    <AppShell eyebrow="Control room" title="Панель управления">
+    <AppShell eyebrow="Операционный центр" title="Панель управления">
       <section className="dashboard-grid">
         <MetricCard label="Активные задачи" value={activeJobs} note="очередь и выполнение" tone={activeJobs ? "warn" : "neutral"} />
         <MetricCard label="Успешные запуски" value={completed} note="последние задачи" tone="good" />
@@ -50,7 +50,7 @@ export default function DashboardPage() {
         <JobLauncher onCreated={(job) => setJobs((items) => [job, ...items])} />
         <div className="panel-card">
           <div className="section-heading">
-            <span className="eyebrow">Recent activity</span>
+            <span className="eyebrow">Последняя активность</span>
             <h2>Последние задачи</h2>
           </div>
           <JobList jobs={jobs.slice(0, 6)} compact />

@@ -22,13 +22,13 @@ export default function JobsPage() {
   }, []);
 
   return (
-    <AppShell eyebrow="Parser queue" title="Запуск и история парсеров">
+    <AppShell eyebrow="Очередь парсеров" title="Запуск и история парсеров">
       <section className="split-layout wide-left">
         <JobLauncher onCreated={(job) => setJobs((items) => [job, ...items])} />
         <div className="panel-card">
           <div className="section-heading horizontal">
             <div>
-              <span className="eyebrow">History</span>
+              <span className="eyebrow">История</span>
               <h2>Все задачи</h2>
             </div>
             <button className="ghost-button" type="button" onClick={() => load().catch(() => undefined)}>Обновить</button>

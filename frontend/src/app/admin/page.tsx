@@ -161,7 +161,7 @@ export default function AdminPage() {
 
   if (error) {
     return (
-      <AppShell eyebrow="Administration" title="Админ-панель">
+      <AppShell eyebrow="Администрирование" title="Админ-панель">
         <div className="panel-card">
           <EmptyState title="Нет доступа" text={error} />
         </div>
@@ -170,13 +170,13 @@ export default function AdminPage() {
   }
 
   return (
-    <AppShell eyebrow="Administration" title="Админ-панель">
+    <AppShell eyebrow="Администрирование" title="Админ-панель">
       {message ? <div className={message.includes("Не удалось") ? "form-message error admin-message" : "form-message admin-message"}>{message}</div> : null}
 
       <section className="admin-control-grid">
         <div className="panel-card admin-users-panel">
           <div className="section-heading horizontal">
-            <div><span className="eyebrow">Users</span><h2>Пользователи и доступ</h2></div>
+            <div><span className="eyebrow">Пользователи</span><h2>Пользователи и доступ</h2></div>
             <button className="ghost-button" type="button" onClick={() => load().catch(() => undefined)}>Обновить</button>
           </div>
           <div className="admin-user-list">
@@ -218,7 +218,7 @@ export default function AdminPage() {
         </div>
 
         <div className="panel-card plan-builder-card">
-          <div className="section-heading"><span className="eyebrow">Plans</span><h2>Создать тариф</h2></div>
+          <div className="section-heading"><span className="eyebrow">Тарифы</span><h2>Создать тариф</h2></div>
           <form className="admin-form" onSubmit={createPlan}>
             <div className="form-grid two equal">
               <label className="field-block compact"><span>Код</span><input value={planForm.code} onChange={(event) => setPlanField("code", event.target.value)} required /></label>
@@ -257,7 +257,7 @@ export default function AdminPage() {
 
       <section className="admin-grid">
         <div className="panel-card">
-          <div className="section-heading"><span className="eyebrow">Plan catalog</span><h2>Тарифы</h2></div>
+          <div className="section-heading"><span className="eyebrow">Каталог тарифов</span><h2>Тарифы</h2></div>
           <div className="plan-admin-list">
             {plans.map((plan) => (
               <article key={plan.id}>
@@ -276,7 +276,7 @@ export default function AdminPage() {
         </div>
 
         <div className="panel-card">
-          <div className="section-heading"><span className="eyebrow">Revenue</span><h2>Счета</h2></div>
+          <div className="section-heading"><span className="eyebrow">Оплаты</span><h2>Счета</h2></div>
           <div className="data-table invoices-table admin-invoices-table">
             <div className="table-row table-head"><span>Клиент</span><span>Сумма</span><span>Статус</span><span>Действие</span></div>
             {invoices.map((invoice) => (
@@ -297,7 +297,7 @@ export default function AdminPage() {
 
       <section className="panel-card">
         <div className="section-heading horizontal">
-          <div><span className="eyebrow">Audit trail</span><h2>Журнал действий</h2></div>
+          <div><span className="eyebrow">Журнал</span><h2>Журнал действий</h2></div>
           <button className="ghost-button" type="button" onClick={() => load().catch(() => undefined)}>Обновить</button>
         </div>
         <div className="audit-list">

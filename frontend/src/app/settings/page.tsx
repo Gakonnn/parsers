@@ -88,7 +88,7 @@ export default function SettingsPage() {
   const currentPlan = usage?.subscription.plan;
 
   return (
-    <AppShell eyebrow="Account" title="Кабинет и настройки">
+    <AppShell eyebrow="Аккаунт" title="Кабинет и настройки">
       {error ? (
         <div className="panel-card">
           <EmptyState title="Не удалось загрузить кабинет" text={error} />
@@ -97,7 +97,7 @@ export default function SettingsPage() {
 
       <section className="settings-hero">
         <div>
-          <span className="eyebrow">Profile</span>
+          <span className="eyebrow">Профиль</span>
           <h2>{user?.full_name || user?.email || "Профиль пользователя"}</h2>
           <p>Управляйте учетной записью, паролем и платежной интеграцией в одном месте.</p>
         </div>
@@ -117,7 +117,7 @@ export default function SettingsPage() {
       <section className="settings-grid">
         <div className="panel-card settings-card">
           <div className="section-heading">
-            <span className="eyebrow">Account</span>
+            <span className="eyebrow">Аккаунт</span>
             <h2>Профиль</h2>
           </div>
           <form className="settings-form" onSubmit={saveProfile}>
@@ -150,7 +150,7 @@ export default function SettingsPage() {
 
         <div className="panel-card settings-card">
           <div className="section-heading">
-            <span className="eyebrow">Security</span>
+            <span className="eyebrow">Безопасность</span>
             <h2>Смена пароля</h2>
           </div>
           <form className="settings-form" onSubmit={savePassword}>
@@ -174,7 +174,7 @@ export default function SettingsPage() {
         <div className="panel-card settings-card settings-card-wide">
           <div className="section-heading horizontal">
             <div>
-              <span className="eyebrow">Billing</span>
+              <span className="eyebrow">Оплата</span>
               <h2>Платежная интеграция</h2>
             </div>
             <StatusPill status={provider?.checkout_mode || "mock"} />

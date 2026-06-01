@@ -46,11 +46,11 @@ export default function ResultsPage() {
   }
 
   return (
-    <AppShell eyebrow="Database" title="Результаты и выгрузка">
+    <AppShell eyebrow="База данных" title="Результаты и выгрузка">
       <section className="panel-card export-panel">
         <div className="section-heading horizontal">
           <div>
-            <span className="eyebrow">Export studio</span>
+            <span className="eyebrow">Студия выгрузки</span>
             <h2>Фильтр выгрузки</h2>
           </div>
           <div className="button-row">

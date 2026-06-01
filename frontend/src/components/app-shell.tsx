@@ -7,13 +7,13 @@ import { api, clearToken, getToken } from "@/lib/api";
 import type { NotificationList, User } from "@/lib/types";
 
 const navigation = [
-  { href: "/dashboard", label: "Обзор", short: "OV" },
-  { href: "/settings", label: "Кабинет", short: "SC" },
-  { href: "/jobs", label: "Парсеры", short: "PR" },
-  { href: "/results", label: "Результаты", short: "DB" },
-  { href: "/billing", label: "Тарифы", short: "₸" },
-  { href: "/notifications", label: "Уведомления", short: "NT" },
-  { href: "/admin", label: "Админка", short: "AD", adminOnly: true },
+  { href: "/dashboard", label: "Обзор", short: "01" },
+  { href: "/settings", label: "Кабинет", short: "02" },
+  { href: "/jobs", label: "Парсеры", short: "03" },
+  { href: "/results", label: "Результаты", short: "04" },
+  { href: "/billing", label: "Тарифы", short: "05" },
+  { href: "/notifications", label: "Уведомления", short: "06" },
+  { href: "/admin", label: "Админка", short: "07", adminOnly: true },
 ];
 
 export function AppShell({ children, eyebrow, title, actions }: { children: ReactNode; eyebrow: string; title: string; actions?: ReactNode }) {
@@ -74,7 +74,7 @@ export function AppShell({ children, eyebrow, title, actions }: { children: Reac
           <span className="brand-mark">P</span>
           <span>
             <strong>ParserDesk</strong>
-            <small>data operations</small>
+            <small>центр управления</small>
           </span>
         </Link>
 

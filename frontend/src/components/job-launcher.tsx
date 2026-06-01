@@ -256,7 +256,7 @@ export function JobLauncher({ onCreated }: { onCreated?: (job: ParserJob) => voi
           <span className="eyebrow">Новый запуск</span>
           <h2>Создать задачу парсинга</h2>
         </div>
-        <span className="soft-badge">smart form</span>
+        <span className="soft-badge">готово к запуску</span>
       </div>
 
       <div className="source-switcher" role="tablist" aria-label="Источник парсинга">

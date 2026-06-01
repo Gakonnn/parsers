@@ -36,10 +36,10 @@ export default function BillingPage() {
   }
 
   return (
-    <AppShell eyebrow="Billing" title="Тарифы и оплата">
+    <AppShell eyebrow="Оплата" title="Тарифы и оплата">
       <section className="billing-hero">
         <div>
-          <span className="eyebrow">Current plan</span>
+          <span className="eyebrow">Текущий тариф</span>
           <h2>{usage?.subscription.plan.name || "Free"}</h2>
           <p>{usage?.jobs_used ?? 0} запусков и {usage?.records_used ?? 0} записей использовано в этом месяце.</p>
         </div>
@@ -67,7 +67,7 @@ export default function BillingPage() {
 
       <section className="panel-card">
         <div className="section-heading">
-          <span className="eyebrow">Invoices</span>
+          <span className="eyebrow">Счета</span>
           <h2>История счетов</h2>
         </div>
         <div className="data-table invoices-table">

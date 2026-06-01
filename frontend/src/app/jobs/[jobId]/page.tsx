@@ -102,7 +102,7 @@ export default function JobDetailPage() {
           <section className="detail-grid">
             <article className="panel-card job-facts">
               <div className="section-heading horizontal">
-                <div><span className="eyebrow">Progress</span><h2>Состояние</h2></div>
+                <div><span className="eyebrow">Прогресс</span><h2>Состояние</h2></div>
                 <button className="ghost-button" type="button" onClick={() => load().catch(() => undefined)}>Обновить</button>
               </div>
               <dl>
@@ -124,7 +124,7 @@ export default function JobDetailPage() {
             </article>
 
             <article className="panel-card job-params">
-              <div className="section-heading"><span className="eyebrow">Payload</span><h2>Параметры</h2></div>
+              <div className="section-heading"><span className="eyebrow">Входные данные</span><h2>Параметры</h2></div>
               <div className="param-list">
                 {parameters.map(([key, value]) => (
                   <div key={key}><span>{key}</span><strong>{value || "-"}</strong></div>
@@ -135,7 +135,7 @@ export default function JobDetailPage() {
 
           <section className="panel-card log-panel">
             <div className="section-heading horizontal">
-              <div><span className="eyebrow">Live log</span><h2>Лог выполнения</h2></div>
+              <div><span className="eyebrow">Live-лог</span><h2>Лог выполнения</h2></div>
               {runner?.stop_requested ? <span className="soft-badge">stop requested</span> : null}
             </div>
             <pre>{logText}</pre>

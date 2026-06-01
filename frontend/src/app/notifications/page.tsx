@@ -36,7 +36,7 @@ export default function NotificationsPage() {
       <section className="panel-card">
         <div className="section-heading horizontal">
           <div>
-            <span className="eyebrow">Unread {unread}</span>
+            <span className="eyebrow">Непрочитано {unread}</span>
             <h2>Системные события</h2>
           </div>
         </div>

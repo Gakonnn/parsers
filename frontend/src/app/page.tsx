@@ -42,8 +42,8 @@ const authScript = `
       if (nameInput) nameInput.required = isRegister;
       title.textContent = isRegister ? "Создать аккаунт" : "Войти в кабинет";
       helper.textContent = isRegister
-        ? "Если аккаунта ещё нет, зарегистрируйтесь. Первый пользователь станет администратором."
-        : "Введите email и пароль существующего аккаунта.";
+        ? "Создайте рабочий аккаунт для запуска парсеров и выгрузки результатов."
+        : "Введите email и пароль, чтобы продолжить работу с задачами.";
       submit.textContent = isRegister ? "Создать аккаунт" : "Войти";
       tabs.forEach((button) => button.classList.toggle("active", button.dataset.authTab === mode));
       if (message) message.textContent = "";
@@ -99,15 +99,15 @@ export default function HomePage() {
           <div className="hero-glow hero-glow-b" />
           <div className="hero-grid" />
           <div className="hero-card hero-card-a">
-            <span className="hero-card-label">Jobs</span>
-            <strong>Live queue</strong>
+            <span className="hero-card-label">Очередь</span>
+            <strong>Live-задачи</strong>
           </div>
           <div className="hero-card hero-card-b">
-            <span className="hero-card-label">DB</span>
-            <strong>Results store</strong>
+            <span className="hero-card-label">База</span>
+            <strong>PostgreSQL</strong>
           </div>
           <div className="hero-card hero-card-c">
-            <span className="hero-card-label">Export</span>
+            <span className="hero-card-label">Выгрузка</span>
             <strong>CSV / XLSX</strong>
           </div>
         </div>
@@ -119,9 +119,9 @@ export default function HomePage() {
           <button type="button" data-auth-tab="register">Регистрация</button>
         </div>
         <div>
-          <span className="eyebrow">Secure access</span>
+          <span className="eyebrow">Безопасный доступ</span>
           <h2 data-auth-title>Войти в кабинет</h2>
-          <p className="auth-helper" data-auth-helper>Введите email и пароль существующего аккаунта.</p>
+          <p className="auth-helper" data-auth-helper>Введите email и пароль, чтобы продолжить работу с задачами.</p>
         </div>
         <form data-auth-form>
           <input type="hidden" name="mode" value="login" data-auth-mode />
