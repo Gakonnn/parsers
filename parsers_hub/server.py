@@ -224,6 +224,109 @@ def is_clean_empty_2gis_result(process_return_code: int | None, attempt_log: str
     return any(marker in attempt_log for marker in empty_markers)
 
 
+def _safe_slug(value: str, fallback: str = "default", max_len: int = 96) -> str:
+    normalized = unicodedata.normalize("NFKD", value or "")
+    slug = re.sub(r"[^a-zA-Z0-9._-]+", "_", normalized).strip("._-").lower()
+    return (slug or fallback)[:max_len].strip("._-") or fallback
+
+
+def gis2_profile_key_from_command(command: list[str]) -> str:
+    """Build a stable 2GIS profile key from domain and city.
+
+    The profile should be reusable across rubrics in the same city, but not
+    shared between cities/domains because 2GIS keeps city-scoped state.
+    """
+    search_url = command_arg_value(command, "--search-url")
+    parsed = urlparse(search_url)
+    host = parsed.netloc or "2gis"
+    path_parts = [part for part in parsed.path.split("/") if part]
+    city = path_parts[0] if path_parts else "default"
+    return _safe_slug(f"{host}_{city}", fallback="2gis_default")
+
+
+def _chrome_profile_ignore(_dir: str, names: list[str]) -> set[str]:
+    volatile_names = {
+        "BrowserMetrics",
+        "Crashpad",
+        "DevToolsActivePort",
+        "DawnCache",
+        "GraphiteDawnCache",
+        "GrShaderCache",
+        "GPUCache",
+        "ShaderCache",
+        "SingletonCookie",
+        "SingletonLock",
+        "SingletonSocket",
+    }
+    ignored = set()
+    for name in names:
+        if name in volatile_names or name.endswith(".tmp"):
+            ignored.add(name)
+    return ignored
+
+
+def copy_chrome_profile(src: Path, dst: Path) -> bool:
+    """Copy a Chrome profile without lock files and volatile browser caches."""
+    if not src.exists() or not src.is_dir():
+        return False
+    tmp_dst = dst.with_name(f".{dst.name}.tmp-{uuid.uuid4().hex[:8]}")
+    shutil.rmtree(tmp_dst, ignore_errors=True)
+    try:
+        shutil.copytree(src, tmp_dst, ignore=_chrome_profile_ignore, dirs_exist_ok=True)
+        shutil.rmtree(dst, ignore_errors=True)
+        tmp_dst.replace(dst)
+        return True
+    except Exception:
+        shutil.rmtree(tmp_dst, ignore_errors=True)
+        return False
+
+
+def prepare_2gis_runtime_profile(runtime_profile_dir: Path, stable_profile_dir: Path | None) -> bool:
+    """Reset a job profile and seed it from the last stable profile if present."""
+    shutil.rmtree(runtime_profile_dir, ignore_errors=True)
+    runtime_profile_dir.mkdir(parents=True, exist_ok=True)
+    if stable_profile_dir and copy_chrome_profile(stable_profile_dir, runtime_profile_dir):
+        return True
+    return False
+
+
+def save_2gis_stable_profile(
+    runtime_profile_dir: Path,
+    stable_profile_dir: Path,
+    metadata: dict[str, Any],
+) -> bool:
+    stable_profile_dir.parent.mkdir(parents=True, exist_ok=True)
+    if not copy_chrome_profile(runtime_profile_dir, stable_profile_dir):
+        return False
+    meta_path = stable_profile_dir.parent / "metadata.json"
+    meta_payload = {
+        **metadata,
+        "saved_at": utc_now(),
+        "profile_dir": str(stable_profile_dir),
+    }
+    meta_path.write_text(json.dumps(meta_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return True
+
+
+def invalidate_2gis_stable_profile(stable_profile_dir: Path, reason: str) -> bool:
+    if not stable_profile_dir.exists():
+        return False
+    stamp = timestamp_slug()
+    bad_dir = stable_profile_dir.with_name(f"{stable_profile_dir.name}_bad_{stamp}")
+    try:
+        stable_profile_dir.replace(bad_dir)
+        meta_path = stable_profile_dir.parent / "metadata.json"
+        meta_payload = {
+            "invalidated_at": utc_now(),
+            "reason": reason,
+            "bad_profile_dir": str(bad_dir),
+        }
+        meta_path.write_text(json.dumps(meta_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        return True
+    except Exception:
+        return False
+
+
 ROOT_DIR = Path(__file__).resolve().parent
 STATIC_DIR = ROOT_DIR / "static"
 RUNS_DIR = ROOT_DIR / "runs"
@@ -437,10 +540,17 @@ class JobManager:
 
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
+        runtime_profile_dir: Path | None = None
+        stable_profile_dir: Path | None = None
+        stable_profile_key = ""
+        stable_profile_seeded = False
+        stable_profile_disabled = False
+        stable_profile_should_save = False
         if job.parser_key == "2gis":
-            profile_dir = RUNS_DIR / "_chrome_profiles" / "2gis" / job.job_id
-            profile_dir.mkdir(parents=True, exist_ok=True)
-            env.setdefault("PARSER_2GIS_CHROME_PROFILE_DIR", str(profile_dir))
+            stable_profile_key = gis2_profile_key_from_command(job.command)
+            runtime_profile_dir = RUNS_DIR / "_chrome_profiles" / "2gis" / job.job_id
+            stable_profile_dir = RUNS_DIR / "_chrome_profiles" / "2gis_stable" / stable_profile_key / "profile"
+            env["PARSER_2GIS_CHROME_PROFILE_DIR"] = str(runtime_profile_dir)
 
         auto_enabled = (
             job.parser_key == "2gis"
@@ -476,6 +586,18 @@ class JobManager:
         attempt = 0
         while True:
             attempt += 1
+            if runtime_profile_dir is not None:
+                use_stable_profile = stable_profile_dir is not None and not stable_profile_disabled
+                stable_profile_seeded = prepare_2gis_runtime_profile(
+                    runtime_profile_dir,
+                    stable_profile_dir if use_stable_profile else None,
+                )
+                profile_source = "stable" if stable_profile_seeded else "clean"
+                self._append_log(
+                    job,
+                    f"[profile] 2GIS key={stable_profile_key}, source={profile_source}, "
+                    f"runtime={runtime_profile_dir}\n",
+                )
             try:
                 process = subprocess.Popen(
                     job.command,
@@ -604,6 +726,7 @@ class JobManager:
                 break
             if stable:
                 self._append_log(job, f"[auto] Стабильный старт найден на попытке {attempt}.\n")
+                stable_profile_should_save = runtime_profile_dir is not None and stable_profile_dir is not None
                 break
             if attempt >= auto_max_attempts:
                 self._append_log(job, "[auto] Лимит попыток исчерпан, продолжаю последний запуск.\n")
@@ -622,6 +745,14 @@ class JobManager:
                     job,
                     f"[auto] Очищена неудачная попытка: files={removed_files}, db_runs={deleted_runs}.\n",
                 )
+            if stable_profile_seeded and stable_profile_dir is not None:
+                if invalidate_2gis_stable_profile(stable_profile_dir, "unstable-start"):
+                    self._append_log(
+                        job,
+                        f"[profile] Сохранённый профиль 2GIS key={stable_profile_key} дал нестабильный старт; "
+                        "пересобираю профиль заново.\n",
+                    )
+                stable_profile_disabled = True
             with self._lock:
                 if job.process is process:
                     job.process = None
@@ -643,6 +774,42 @@ class JobManager:
                 job.status = "completed"
             else:
                 job.status = "failed"
+
+        if (
+            stable_profile_should_save
+            and return_code == 0
+            and not job.stop_requested
+            and runtime_profile_dir is not None
+            and stable_profile_dir is not None
+        ):
+            log_text = "".join(job.log_lines[-2000:])
+            fatal_markers = (
+                "Ошибка во время работы парсера.",
+                "Вкладка браузера была закрыта.",
+                "Работа парсера прервана пользователем.",
+            )
+            if not any(marker in log_text for marker in fatal_markers):
+                saved = save_2gis_stable_profile(
+                    runtime_profile_dir,
+                    stable_profile_dir,
+                    {
+                        "key": stable_profile_key,
+                        "job_id": job.job_id,
+                        "command": job.command,
+                        "return_code": return_code,
+                    },
+                )
+                if saved:
+                    self._append_log(
+                        job,
+                        f"[profile] Стабильный профиль 2GIS сохранён: key={stable_profile_key}, "
+                        f"path={stable_profile_dir}\n",
+                    )
+                else:
+                    self._append_log(
+                        job,
+                        f"[profile] Не удалось сохранить стабильный профиль 2GIS: key={stable_profile_key}\n",
+                    )
 
         if return_code != 0:
             reason = "interrupted" if job.stop_requested else "error"
