@@ -61,7 +61,7 @@ class MainParser:
                  parser_options: ParserOptions) -> None:
         self._options = parser_options
         self._url = url
-        self._item_attempts = max(1, int(os.environ.get('PARSER_2GIS_ITEM_ATTEMPTS', '1')))
+        self._item_attempts = max(1, int(os.environ.get('PARSER_2GIS_ITEM_ATTEMPTS', '2')))
         self._click_timeout = max(0.5, float(os.environ.get('PARSER_2GIS_CLICK_TIMEOUT_SEC', '2')))
         self._response_timeout = max(0.5, float(os.environ.get('PARSER_2GIS_RESPONSE_TIMEOUT_SEC', '3')))
         self._body_timeout = max(0.5, float(os.environ.get('PARSER_2GIS_BODY_TIMEOUT_SEC', '3')))
@@ -185,6 +185,24 @@ class MainParser:
             logger.warning('Прямая навигация на страницу %s не удалась: %s', n_page, exc)
 
         return None
+
+    def _page_url(self, n_page: int) -> str:
+        base_url = re.sub(r'/page/\d+', '', self._url, re.I).rstrip('/')
+        if n_page <= 1:
+            return base_url
+        return f'{base_url}/page/{n_page}'
+
+    def _reload_search_page(self, n_page: int) -> bool:
+        """Reload current search page and reset stale catalog responses."""
+        try:
+            self._chrome_remote.navigate(self._page_url(n_page), referer='https://google.com', timeout=120)
+            self._prewarm_search_page()
+            if hasattr(self._chrome_remote, 'clear_response_queue'):
+                self._chrome_remote.clear_response_queue(self._item_response_pattern)
+            return True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning('Не удалось восстановить страницу %s: %s', n_page, exc)
+            return False
 
     def _find_link_by_href(self, href: str) -> Optional[DOMNode]:
         """Find clickable link in the current DOM by exact href."""
@@ -403,8 +421,13 @@ class MainParser:
 
         consecutive_skips = 0
         max_consecutive_skips = max(0, int(os.environ.get('PARSER_2GIS_MAX_CONSECUTIVE_SKIPS_PER_PAGE', '3')))
+        max_page_recoveries = max(0, int(os.environ.get('PARSER_2GIS_MAX_PAGE_RECOVERIES', '1')))
+        page_recoveries: dict[int, int] = {}
 
         while True:
+            retry_current_page = False
+            page_failed_hrefs: list[str] = []
+
             # Wait all 2GIS requests get finished
             self._wait_requests_finished()
 
@@ -419,7 +442,7 @@ class MainParser:
                     resp = None
                     click_error = None
                     doc = None
-                    for _ in range(self._item_attempts):
+                    for item_attempt in range(self._item_attempts):
                         # Drop stale buffered responses before current click.
                         if hasattr(self._chrome_remote, 'clear_response_queue'):
                             self._chrome_remote.clear_response_queue(self._item_response_pattern)
@@ -462,12 +485,16 @@ class MainParser:
                         try:
                             parsed_doc = json.loads(data)
                         except json.JSONDecodeError:
+                            can_retry = item_attempt + 1 < self._item_attempts
+                            if can_retry:
+                                logger.debug(
+                                    'Сервер вернул некорректный JSON документ, повтор позиции %s/%s.',
+                                    item_attempt + 1,
+                                    self._item_attempts,
+                                )
+                                self._chrome_remote.wait(0.35)
+                                continue
                             logger.error('Сервер вернул некорректный JSON документ: "%s", пропуск позиции.', data)
-                            if not str(data or '').strip():
-                                # Empty bodies usually mean CDP/2GIS returned an unusable
-                                # response for this card; retrying the same link is slow
-                                # and almost always gives the same result on server IPs.
-                                break
                             continue
 
                         if self._valid_catalog_document(parsed_doc):
@@ -496,6 +523,7 @@ class MainParser:
                         emit_progress()
                     else:
                         consecutive_skips += 1
+                        page_failed_hrefs.append(link_href)
                         if resp and resp.get('status', 0) < 0:
                             logger.error('Данные не получены, пропуск позиции. Причина: %s',
                                          resp.get('statusText', 'unknown'))
@@ -508,6 +536,20 @@ class MainParser:
                         persist_checkpoint()
                         emit_progress()
                         if max_consecutive_skips and consecutive_skips >= max_consecutive_skips:
+                            recoveries_done = page_recoveries.get(current_page_number, 0)
+                            if recoveries_done < max_page_recoveries:
+                                page_recoveries[current_page_number] = recoveries_done + 1
+                                for failed_href in page_failed_hrefs:
+                                    visited_links.discard(failed_href)
+                                persist_checkpoint()
+                                logger.warning(
+                                    'Слишком много пропусков подряд (%s), восстанавливаю страницу %s и повторяю.',
+                                    consecutive_skips,
+                                    current_page_number,
+                                )
+                                retry_current_page = self._reload_search_page(current_page_number)
+                                consecutive_skips = 0
+                                break
                             logger.warning(
                                 'Слишком много пропусков подряд (%s), перехожу к следующей странице выдачи.',
                                 consecutive_skips,
@@ -533,6 +575,9 @@ class MainParser:
 
             # Free memory allocated for collected requests
             self._chrome_remote.clear_requests()
+
+            if retry_current_page:
+                continue
 
             # Calculate next page number and navigate it
             if walk_page_number:

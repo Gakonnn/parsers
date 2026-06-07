@@ -446,10 +446,29 @@ class JobManager:
             job.parser_key == "2gis"
             and env.get("PARSERS_HUB_2GIS_AUTO_RESTART", "true").strip().lower() in {"1", "true", "yes", "on"}
         )
+        configured_total = extract_total_from_command(job.command)
+        default_probe_seconds = 20 if configured_total >= 100 else 14
+        default_min_records = 2
+        if configured_total >= 300:
+            default_min_records = 5
+        elif configured_total >= 100:
+            default_min_records = 4
+        elif configured_total >= 50:
+            default_min_records = 3
+        default_confirm_records = max(
+            default_min_records,
+            8 if configured_total >= 300 else 6 if configured_total >= 100 else 4 if configured_total >= 50 else 3,
+        )
+
         auto_max_attempts = max(30, int(env.get("PARSERS_HUB_2GIS_AUTO_MAX_ATTEMPTS", "30")))
-        auto_probe_seconds = max(6, int(env.get("PARSERS_HUB_2GIS_AUTO_PROBE_SECONDS", "12")))
+        auto_probe_seconds = max(6, int(env.get("PARSERS_HUB_2GIS_AUTO_PROBE_SECONDS", str(default_probe_seconds))))
         auto_first_deadline = max(1.0, float(env.get("PARSERS_HUB_2GIS_AUTO_FIRST_PARSE_DEADLINE", "9")))
-        auto_min_records = max(1, int(env.get("PARSERS_HUB_2GIS_AUTO_MIN_RECORDS", "2")))
+        auto_min_records = max(1, int(env.get("PARSERS_HUB_2GIS_AUTO_MIN_RECORDS", str(default_min_records))))
+        auto_confirm_records = max(
+            auto_min_records,
+            int(env.get("PARSERS_HUB_2GIS_AUTO_CONFIRM_RECORDS", str(default_confirm_records))),
+        )
+        auto_stable_hold_seconds = max(0.0, float(env.get("PARSERS_HUB_2GIS_AUTO_STABLE_HOLD_SECONDS", "4")))
         auto_error_budget = max(0, int(env.get("PARSERS_HUB_2GIS_AUTO_ERROR_BUDGET", "0")))
         job_database_url = command_arg_value(job.command, "--database-url") or DEFAULT_DATABASE_URL
 
@@ -487,33 +506,44 @@ class JobManager:
             parsed_count = 0
             error_count = 0
             first_parse_delay: float | None = None
+            last_parse_at: float | None = None
             stable_seen = False
             stable_reason = ""
             probe_start = time.monotonic()
             attempt_lines: list[str] = []
 
             def record_probe_line(line: str) -> None:
-                nonlocal parsed_count, error_count, first_parse_delay, stable_seen, stable_reason
+                nonlocal parsed_count, error_count, first_parse_delay, last_parse_at
                 attempt_lines.append(line)
                 self._append_log(job, line)
                 if "Парсинг [" in line:
                     parsed_count += 1
+                    last_parse_at = time.monotonic()
                     if first_parse_delay is None:
-                        first_parse_delay = time.monotonic() - probe_start
+                        first_parse_delay = last_parse_at - probe_start
                 if "Данные не получены" in line or "ERROR" in line:
                     error_count += 1
+
+            def has_stable_probe(now: float) -> bool:
                 if (
-                    not stable_seen
-                    and first_parse_delay is not None
-                    and first_parse_delay <= auto_first_deadline
-                    and parsed_count >= auto_min_records
-                    and error_count <= auto_error_budget
+                    first_parse_delay is None
+                    or first_parse_delay > auto_first_deadline
+                    or parsed_count < auto_min_records
+                    or error_count > auto_error_budget
                 ):
-                    stable_seen = True
-                    stable_reason = "early-success"
+                    return False
+                if parsed_count >= auto_confirm_records:
+                    return True
+                if last_parse_at is not None and now - last_parse_at >= auto_stable_hold_seconds:
+                    return True
+                return False
 
             while time.monotonic() - probe_start < auto_probe_seconds:
                 if job.stop_requested:
+                    break
+                if has_stable_probe(time.monotonic()):
+                    stable_seen = True
+                    stable_reason = "confirmed-records" if parsed_count >= auto_confirm_records else "quiet-window"
                     break
                 if process.poll() is not None:
                     for remaining_line in process.stdout:
@@ -526,7 +556,9 @@ class JobManager:
                 if not line:
                     break
                 record_probe_line(line)
-                if stable_seen:
+                if has_stable_probe(time.monotonic()):
+                    stable_seen = True
+                    stable_reason = "confirmed-records" if parsed_count >= auto_confirm_records else "quiet-window"
                     break
 
             elapsed = max(0.001, time.monotonic() - probe_start)
@@ -546,18 +578,16 @@ class JobManager:
             )
             stable = (
                 stable_seen
-                or (
-                    first_parse_delay is not None
-                    and first_parse_delay <= auto_first_deadline
-                    and parsed_count >= auto_min_records
-                    and error_count <= auto_error_budget
-                )
+                or has_stable_probe(time.monotonic())
             )
+            if stable and not stable_reason:
+                stable_reason = "confirmed-records" if parsed_count >= auto_confirm_records else "quiet-window"
             self._append_log(
                 job,
                 f"[auto] Итог попытки {attempt}: records={parsed_count}, "
                 f"first={round(first_parse_delay, 2) if first_parse_delay is not None else 'none'}s, "
-                f"rps={round(rps, 2)}, errors={error_count}, min_records={auto_min_records}"
+                f"rps={round(rps, 2)}, errors={error_count}, min_records={auto_min_records}, "
+                f"confirm_records={auto_confirm_records}, hold={auto_stable_hold_seconds:g}s"
                 f"{', stable=' + stable_reason if stable_reason else ''}\n",
             )
 
