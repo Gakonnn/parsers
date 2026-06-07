@@ -22,7 +22,7 @@ class Gis2Adapter(SourceAdapter):
         parser.add_argument(
             "--delay-between-clicks",
             type=int,
-            default=250,
+            default=800,
             help="Delay between clicks in milliseconds (stabilizes parsing on server IPs)",
         )
         parser.add_argument("--format", choices=["xlsx", "csv", "json"], default="xlsx", help="Output format")
@@ -52,6 +52,9 @@ class Gis2Adapter(SourceAdapter):
         output_path.parent.mkdir(parents=True, exist_ok=True)
         checkpoint_path = output_path.with_suffix(output_path.suffix + ".checkpoint.json")
 
+        disable_images = os.environ.get("PARSERS_2GIS_DISABLE_IMAGES", "no").strip().lower()
+        disable_images_value = "yes" if disable_images in {"1", "true", "yes", "on"} else "no"
+
         command = [
             "parser-2gis",
             "-i",
@@ -69,7 +72,7 @@ class Gis2Adapter(SourceAdapter):
             "--parser.delay_between_clicks",
             str(max(0, int(args.delay_between_clicks))),
             "--chrome.disable-images",
-            "yes",
+            disable_images_value,
             "--chrome.silent-browser",
             "yes",
         ]

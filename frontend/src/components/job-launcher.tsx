@@ -52,7 +52,7 @@ function buildParameters(source: ParserSource, url: string, limit: number): Reco
     return {
       search_url: url,
       max_records: limit,
-      delay_between_clicks: 250,
+      delay_between_clicks: 800,
       format: "xlsx",
       start_maximized: false,
       run_via_agent: false,
