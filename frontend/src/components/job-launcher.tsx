@@ -15,7 +15,9 @@ import {
 } from "@/lib/parser-options";
 import type { OlxCategoriesTree, ParserJob, ParserSource, TwoGisCitiesTree, TwoGisRubricsTree } from "@/lib/types";
 
-const sourceDefaults: Record<ParserSource, { label: string; urlLabel: string; url: string; limitLabel: string; hint: string }> = {
+type LaunchParserSource = Exclude<ParserSource, "kolesa">;
+
+const sourceDefaults: Record<LaunchParserSource, { label: string; urlLabel: string; url: string; limitLabel: string; hint: string }> = {
   olx: {
     label: "OLX.kz",
     urlLabel: "Ссылка категории",
@@ -37,16 +39,9 @@ const sourceDefaults: Record<ParserSource, { label: string; urlLabel: string; ur
     limitLabel: "Максимум организаций",
     hint: "Выберите домен, город и рубрику. Поддерживаются 3 уровня рубрик.",
   },
-  kolesa: {
-    label: "Kolesa.kz",
-    urlLabel: "Ссылка листинга",
-    url: "https://kolesa.kz/cars/",
-    limitLabel: "Лимит объявлений",
-    hint: "Kolesa стартует через HTTP-листинг, телефоны берутся через API-сессии.",
-  },
 };
 
-function buildParameters(source: ParserSource, url: string, limit: number): Record<string, unknown> {
+function buildParameters(source: LaunchParserSource, url: string, limit: number): Record<string, unknown> {
   if (source === "olx") return { category_url: url, limit, output_name: "" };
   if (source === "2gis") {
     return {
@@ -73,15 +68,7 @@ function buildParameters(source: ParserSource, url: string, limit: number): Reco
       account_password: "",
     };
   }
-  return {
-    listing_url: url,
-    listing_limit: limit,
-    output_name: "kolesa_results.json",
-    driver: "http",
-    no_proxy: true,
-    headless: true,
-    verify_ssl: false,
-  };
+  throw new Error("Источник временно недоступен");
 }
 
 function selectedText(parts: string[]): string {
@@ -89,7 +76,7 @@ function selectedText(parts: string[]): string {
 }
 
 export function JobLauncher({ onCreated }: { onCreated?: (job: ParserJob) => void }) {
-  const [source, setSource] = useState<ParserSource>("2gis");
+  const [source, setSource] = useState<LaunchParserSource>("2gis");
   const [url, setUrl] = useState(sourceDefaults["2gis"].url);
   const [limit, setLimit] = useState(50);
   const [manualUrl, setManualUrl] = useState(false);
@@ -213,11 +200,11 @@ export function JobLauncher({ onCreated }: { onCreated?: (job: ParserJob) => voi
   }, [source, olxL1, olxL2, olxL3, olxLocation, gisDomain, gisCity, gisL1, gisL2, gisL3, krishaRoot, krishaCity, krishaDistrict, url]);
 
   useEffect(() => {
-    if (manualUrl || source === "kolesa" || !generatedUrl || generatedUrl === url) return;
+    if (manualUrl || !generatedUrl || generatedUrl === url) return;
     setUrl(generatedUrl);
   }, [manualUrl, source, generatedUrl, url]);
 
-  function changeSource(next: ParserSource) {
+  function changeSource(next: LaunchParserSource) {
     setSource(next);
     setUrl(sourceDefaults[next].url);
     setManualUrl(false);
@@ -260,7 +247,7 @@ export function JobLauncher({ onCreated }: { onCreated?: (job: ParserJob) => voi
       </div>
 
       <div className="source-switcher" role="tablist" aria-label="Источник парсинга">
-        {(Object.keys(sourceDefaults) as ParserSource[]).map((key) => (
+        {(Object.keys(sourceDefaults) as LaunchParserSource[]).map((key) => (
           <button key={key} type="button" className={key === source ? "active" : ""} onClick={() => changeSource(key)}>
             {sourceDefaults[key].label}
           </button>
@@ -308,7 +295,7 @@ export function JobLauncher({ onCreated }: { onCreated?: (job: ParserJob) => voi
       <label className="field-block">
         <span>{selected.urlLabel}</span>
         <div className="url-control">
-          <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder={selected.url} readOnly={!manualUrl && source !== "kolesa"} required />
+          <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder={selected.url} readOnly={!manualUrl} required />
           <button type="button" className="ghost-button" onClick={() => setManualUrl((value) => !value)}>
             {manualUrl ? "Авто" : "Вручную"}
           </button>

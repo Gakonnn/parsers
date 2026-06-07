@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "ParserDesk | Parsers Platform",
-  description: "Многопользовательская платформа для управления парсерами 2GIS, OLX, Krisha и Kolesa.",
+  description: "Многопользовательская платформа для управления парсерами 2GIS, OLX и Krisha.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

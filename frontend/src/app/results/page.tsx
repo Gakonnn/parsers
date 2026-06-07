@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { ResultTable } from "@/components/result-table";
 import { api, downloadResults } from "@/lib/api";
-import type { ParserResult, ParserSource } from "@/lib/types";
+import type { ParserResult } from "@/lib/types";
 
-const sources = ["", "2gis", "olx", "krisha", "kolesa"] as const;
+const sources = ["", "2gis", "olx", "krisha"] as const;
+type VisibleSource = (typeof sources)[number];
 
 export default function ResultsPage() {
   const [source, setSource] = useState<(typeof sources)[number]>("");
@@ -65,7 +66,7 @@ export default function ResultsPage() {
             <select
               value={source}
               onChange={(event) => {
-                const next = event.target.value as ParserSource | "";
+                const next = event.target.value as VisibleSource;
                 setSource(next);
                 load(next, allUsers).catch(() => undefined);
               }}

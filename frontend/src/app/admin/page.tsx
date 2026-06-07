@@ -8,7 +8,7 @@ import { api } from "@/lib/api";
 import { formatDate, formatMoney, truncateMiddle } from "@/lib/format";
 import type { AuditLog, Invoice, SubscriptionPlan, User } from "@/lib/types";
 
-const sourceOptions = ["olx", "krisha", "2gis", "kolesa"];
+const sourceOptions = ["olx", "krisha", "2gis"];
 
 type PlanForm = {
   code: string;
@@ -28,7 +28,7 @@ const initialPlanForm: PlanForm = {
   price_kzt: 49000,
   max_jobs_per_month: 200,
   max_records_per_month: 50000,
-  allowed_sources: ["olx", "krisha", "2gis", "kolesa"],
+  allowed_sources: ["olx", "krisha", "2gis"],
   is_public: true,
 };
 
