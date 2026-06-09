@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 const configuredApiBase = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 
 const authScript = `
@@ -93,6 +95,13 @@ const authScript = `
 export default function HomePage() {
   return (
     <main className="auth-page">
+      <nav className="auth-public-nav" aria-label="Публичная навигация">
+        <Link href="/about">О нас</Link>
+        <Link href="/guide">Инструкция</Link>
+        <Link href="/finance">Тарифы</Link>
+        <Link href="/payment">Оплата</Link>
+      </nav>
+
       <section className="hero-panel">
         <div className="hero-stage" aria-hidden="true">
           <div className="hero-glow hero-glow-a" />
