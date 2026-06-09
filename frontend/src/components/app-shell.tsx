@@ -8,10 +8,10 @@ import type { NotificationList, User } from "@/lib/types";
 
 const navigation = [
   { href: "/dashboard", label: "Обзор", short: "01" },
-  { href: "/settings", label: "Кабинет", short: "02" },
-  { href: "/jobs", label: "Парсеры", short: "03" },
-  { href: "/results", label: "Результаты", short: "04" },
-  { href: "/billing", label: "Тарифы", short: "05" },
+  { href: "/profile", label: "Кабинет", short: "02", aliases: ["/settings"] },
+  { href: "/marketing", label: "Парсеры", short: "03", aliases: ["/jobs"] },
+  { href: "/structure", label: "Результаты", short: "04", aliases: ["/results"] },
+  { href: "/billing", label: "Тарифы", short: "05", aliases: ["/orders", "/cart"] },
   { href: "/notifications", label: "Уведомления", short: "06" },
   { href: "/admin", label: "Админка", short: "07", adminOnly: true },
 ];
@@ -80,7 +80,7 @@ export function AppShell({ children, eyebrow, title, actions }: { children: Reac
 
         <nav className="nav-stack">
           {visibleNavigation.map((item) => (
-            <Link key={item.href} className={pathname === item.href ? "active" : ""} href={item.href}>
+            <Link key={item.href} className={pathname === item.href || item.aliases?.includes(pathname) ? "active" : ""} href={item.href}>
               <span>{item.short}</span>
               {item.label}
             </Link>

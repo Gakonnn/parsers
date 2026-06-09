@@ -54,6 +54,7 @@ const authScript = `
     tabs.forEach((button) => {
       button.addEventListener("click", () => setMode(button.dataset.authTab || "login"));
     });
+    setMode(window.location.pathname === "/register" ? "register" : "login");
 
     if (!form) return;
     form.addEventListener("submit", async (event) => {

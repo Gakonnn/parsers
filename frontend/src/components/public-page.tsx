@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 
 const publicLinks = [
   { href: "/about", label: "О нас" },
+  { href: "/marketing", label: "Парсеры" },
+  { href: "/structure", label: "Результаты" },
   { href: "/guide", label: "Инструкция" },
   { href: "/finance", label: "Тарифы" },
   { href: "/payment", label: "Оплата" },
@@ -47,6 +49,18 @@ export function PublicPage({
       </section>
 
       {children}
+
+      <footer className="public-footer">
+        <div>
+          <strong>ParseHub Data Solutions</strong>
+          <span>2026 © Все права защищены</span>
+        </div>
+        <nav aria-label="Документы">
+          <Link href="/privacy">Политика</Link>
+          <Link href="/offer">Оферта</Link>
+          <Link href="/payment">Оплата</Link>
+        </nav>
+      </footer>
     </main>
   );
 }
