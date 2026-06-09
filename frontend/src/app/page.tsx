@@ -97,10 +97,16 @@ export default function HomePage() {
   return (
     <main className="auth-page">
       <nav className="auth-public-nav" aria-label="Публичная навигация">
-        <Link href="/about">О нас</Link>
-        <Link href="/guide">Инструкция</Link>
-        <Link href="/finance">Тарифы</Link>
-        <Link href="/payment">Оплата</Link>
+        <Link className="auth-brand-link" href="/">
+          <span><img src="/logo/logo.png" alt="" /></span>
+          <strong>ParseHub</strong>
+        </Link>
+        <div>
+          <Link href="/about">О нас</Link>
+          <Link href="/guide">Инструкция</Link>
+          <Link href="/finance">Тарифы</Link>
+          <Link href="/payment">Оплата</Link>
+        </div>
       </nav>
 
       <section className="hero-panel">

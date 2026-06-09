@@ -7,13 +7,13 @@ import { api, clearToken, getToken } from "@/lib/api";
 import type { NotificationList, User } from "@/lib/types";
 
 const navigation = [
-  { href: "/dashboard", label: "Обзор", short: "01" },
-  { href: "/profile", label: "Кабинет", short: "02", aliases: ["/settings"] },
-  { href: "/marketing", label: "Парсеры", short: "03", aliases: ["/jobs"] },
-  { href: "/structure", label: "Результаты", short: "04", aliases: ["/results"] },
-  { href: "/billing", label: "Тарифы", short: "05", aliases: ["/orders", "/cart"] },
-  { href: "/notifications", label: "Уведомления", short: "06" },
-  { href: "/admin", label: "Админка", short: "07", adminOnly: true },
+  { href: "/dashboard", label: "Обзор" },
+  { href: "/marketing", label: "Парсеры", aliases: ["/jobs"] },
+  { href: "/structure", label: "Результаты", aliases: ["/results"] },
+  { href: "/billing", label: "Тарифы", aliases: ["/orders", "/cart"] },
+  { href: "/profile", label: "Кабинет", aliases: ["/settings"] },
+  { href: "/notifications", label: "Уведомления" },
+  { href: "/admin", label: "Админка", adminOnly: true },
 ];
 
 export function AppShell({ children, eyebrow, title, actions }: { children: ReactNode; eyebrow: string; title: string; actions?: ReactNode }) {
@@ -68,58 +68,80 @@ export function AppShell({ children, eyebrow, title, actions }: { children: Reac
   const visibleNavigation = navigation.filter((item) => !item.adminOnly || user?.role === "admin");
 
   return (
-    <div className="workspace-shell">
-      <aside className="sidebar-panel">
-        <Link className="brand-lockup" href="/dashboard">
-          <span className="brand-mark">P</span>
-          <span>
-            <strong>ParserDesk</strong>
-            <small>центр управления</small>
-          </span>
-        </Link>
+    <div className="parsehub-shell">
+      <header className="parsehub-header">
+        <div className="parsehub-header-inner">
+          <Link className="parsehub-brand" href="/dashboard" aria-label="ParseHub dashboard">
+            <span className="parsehub-logo-wrap">
+              <img src="/logo/logo.png" alt="" />
+            </span>
+            <strong>ParseHub</strong>
+          </Link>
 
-        <nav className="nav-stack">
-          {visibleNavigation.map((item) => (
-            <Link key={item.href} className={pathname === item.href || item.aliases?.includes(pathname) ? "active" : ""} href={item.href}>
-              <span>{item.short}</span>
-              {item.label}
+          <nav className="parsehub-nav" aria-label="Основная навигация">
+            {visibleNavigation.map((item) => (
+              <Link key={item.href} className={pathname === item.href || item.aliases?.includes(pathname) ? "active" : ""} href={item.href}>
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+
+          <div className="parsehub-userbar">
+            <Link className="parsehub-notice" href="/notifications">
+              <span>{notifications?.unread_total || 0}</span>
+              новых
             </Link>
-          ))}
-        </nav>
-
-        <div className="operator-card">
-          <span className="operator-label">Аккаунт</span>
-          <strong>{user?.full_name || user?.email || "Загрузка"}</strong>
-          <small>{user?.role === "admin" ? "Администратор" : "Пользователь"}</small>
-          <button
-            className="ghost-button wide"
-            type="button"
-            onClick={() => {
-              clearToken();
-              router.replace("/");
-            }}
-          >
-            Выйти
-          </button>
+            <span className="parsehub-account" title={user?.email || ""}>
+              {user?.full_name || user?.email || "Загрузка"}
+            </span>
+            <button
+              className="parsehub-logout"
+              type="button"
+              onClick={() => {
+                clearToken();
+                router.replace("/");
+              }}
+            >
+              Выйти
+            </button>
+          </div>
         </div>
-      </aside>
+      </header>
 
-      <main className="workspace-main">
+      <main className="workspace-main parsehub-main">
         <header className="topbar">
           <div>
             <span className="eyebrow">{eyebrow}</span>
             <h1>{title}</h1>
           </div>
-          <div className="topbar-actions">
-            <Link className="notification-chip" href="/notifications">
-              <span>{notifications?.unread_total || 0}</span>
-              новых
-            </Link>
-            {actions}
-          </div>
+          <div className="topbar-actions">{actions}</div>
         </header>
         {!ready ? <div className="loading-card">Подключаем кабинет...</div> : children}
       </main>
+
+      <footer className="parsehub-footer">
+        <div>
+          <h3>Документы и информация</h3>
+          <Link href="/about">О нас</Link>
+          <Link href="/privacy">Политика конфиденциальности</Link>
+          <Link href="/offer">Оферта</Link>
+          <Link href="/payment">Оплата</Link>
+          <Link href="/guide">Инструкция</Link>
+        </div>
+        <div>
+          <h3>Социальные сети</h3>
+          <div className="parsehub-socials">
+            <a href="#" aria-label="YouTube">YT</a>
+            <a href="#" aria-label="Instagram">IG</a>
+            <a href="#" aria-label="Telegram">TG</a>
+            <a href="#" aria-label="WhatsApp">WA</a>
+          </div>
+        </div>
+        <div>
+          <h3>Служба поддержки ParseHub</h3>
+          <p>Поддержка по задачам, выгрузкам, тарифам и настройкам доступа.</p>
+        </div>
+      </footer>
     </div>
   );
 }
