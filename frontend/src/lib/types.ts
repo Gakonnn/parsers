@@ -173,6 +173,8 @@ export type PaymentProviderInfo = {
   success_url?: string | null;
   cancel_url?: string | null;
   webhook_secret_configured: boolean;
+  kaspi_qr_enabled: boolean;
+  kaspi_pos_base_url?: string | null;
 };
 
 export type UserProfileUpdateRequest = {

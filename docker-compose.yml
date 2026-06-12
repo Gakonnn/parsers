@@ -38,6 +38,35 @@ services:
       - redis_data:/data
     command: ["redis-server", "--appendonly", "yes"]
 
+  kaspi_pos:
+    build:
+      context: integrations/kaspi-pos-automation
+      dockerfile: Dockerfile
+    container_name: parsers-kaspi-pos
+    restart: unless-stopped
+    environment:
+      TOKEN_SECRET_KEY: ${KASPI_POS_TOKEN_SECRET_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
+      KASPI_POS_STATE_DIR: /app/state
+      KASPI_POS_DEFAULT_WEBHOOK_URL: ${KASPI_POS_DEFAULT_WEBHOOK_URL:-http://backend:8000/api/v1/billing/kaspi/webhook}
+      KASPI_POS_DEFAULT_WEBHOOK_SECRET: ${KASPI_POS_WEBHOOK_SECRET:-change-kaspi-webhook-secret}
+      APP_VERSION: ${KASPI_APP_VERSION:-4.111}
+      APP_BUILD: ${KASPI_APP_BUILD:-1101}
+      APP_PLATFORM: ${KASPI_APP_PLATFORM:-iOS}
+      APP_PLATFORM_VER: ${KASPI_APP_PLATFORM_VER:-18.5}
+      APP_LOCALE: ${KASPI_APP_LOCALE:-ru-RU}
+      APP_MODEL: ${KASPI_APP_MODEL:-iPhone17,3}
+      APP_BRAND: ${KASPI_APP_BRAND:-Apple}
+      APP_DEVICE_NAME: ${KASPI_APP_DEVICE_NAME:-iPhone}
+      APP_SCREEN_W: ${KASPI_APP_SCREEN_W:-393.0}
+      APP_SCREEN_H: ${KASPI_APP_SCREEN_H:-852.0}
+      APP_CFNETWORK: ${KASPI_APP_CFNETWORK:-CFNetwork/3826.500.131}
+      APP_DARWIN: ${KASPI_APP_DARWIN:-Darwin/24.5.0}
+      TZ: ${TZ:-Asia/Almaty}
+    ports:
+      - "${KASPI_POS_PORT:-3011}:3000"
+    volumes:
+      - kaspi_pos_state:/app/state
+
   parsers_hub:
     platform: linux/amd64
     build:
@@ -95,6 +124,14 @@ services:
       PAYMENT_CHECKOUT_URL_TEMPLATE: ${PAYMENT_CHECKOUT_URL_TEMPLATE:-}
       PAYMENT_SUCCESS_URL: ${PAYMENT_SUCCESS_URL:-}
       PAYMENT_CANCEL_URL: ${PAYMENT_CANCEL_URL:-}
+      KASPI_POS_BASE_URL: ${KASPI_POS_BASE_URL:-http://kaspi_pos:3000}
+      KASPI_POS_TOKEN_SN: ${KASPI_POS_TOKEN_SN:-}
+      KASPI_POS_VTOKEN_SECRET: ${KASPI_POS_VTOKEN_SECRET:-}
+      KASPI_POS_PROFILE_ID: ${KASPI_POS_PROFILE_ID:-}
+      KASPI_POS_LATITUDE: ${KASPI_POS_LATITUDE:-43.204643483375889}
+      KASPI_POS_LONGITUDE: ${KASPI_POS_LONGITUDE:-76.891962364115912}
+      KASPI_POS_TIMEOUT_SEC: ${KASPI_POS_TIMEOUT_SEC:-15}
+      KASPI_POS_WEBHOOK_SECRET: ${KASPI_POS_WEBHOOK_SECRET:-change-kaspi-webhook-secret}
       TZ: ${TZ:-Asia/Almaty}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
@@ -131,6 +168,14 @@ services:
       PAYMENT_CHECKOUT_URL_TEMPLATE: ${PAYMENT_CHECKOUT_URL_TEMPLATE:-}
       PAYMENT_SUCCESS_URL: ${PAYMENT_SUCCESS_URL:-}
       PAYMENT_CANCEL_URL: ${PAYMENT_CANCEL_URL:-}
+      KASPI_POS_BASE_URL: ${KASPI_POS_BASE_URL:-http://kaspi_pos:3000}
+      KASPI_POS_TOKEN_SN: ${KASPI_POS_TOKEN_SN:-}
+      KASPI_POS_VTOKEN_SECRET: ${KASPI_POS_VTOKEN_SECRET:-}
+      KASPI_POS_PROFILE_ID: ${KASPI_POS_PROFILE_ID:-}
+      KASPI_POS_LATITUDE: ${KASPI_POS_LATITUDE:-43.204643483375889}
+      KASPI_POS_LONGITUDE: ${KASPI_POS_LONGITUDE:-76.891962364115912}
+      KASPI_POS_TIMEOUT_SEC: ${KASPI_POS_TIMEOUT_SEC:-15}
+      KASPI_POS_WEBHOOK_SECRET: ${KASPI_POS_WEBHOOK_SECRET:-change-kaspi-webhook-secret}
       TZ: ${TZ:-Asia/Almaty}
     command: >
       celery -A app.worker.celery_app worker
@@ -172,3 +217,4 @@ services:
 volumes:
   pg_data:
   redis_data:
+  kaspi_pos_state:

@@ -29,10 +29,14 @@ from app.services.payments import (
     create_invoice_for_plan,
     find_plan,
     mark_invoice_paid,
+    process_kaspi_webhook,
     process_payment_webhook,
+    sync_kaspi_invoice_status,
+    verify_kaspi_webhook_signature,
     verify_webhook_signature,
     webhook_payload_from_raw,
 )
+from app.services.kaspi_pos import KASPI_QR_PROVIDER, kaspi_pos_configured
 from app.services.audit import log_event, notify_user
 from app.services.quota import current_month_start, get_monthly_usage, get_or_create_active_subscription
 
@@ -50,6 +54,8 @@ def read_payment_provider(_: User = Depends(get_current_user)) -> PaymentProvide
         success_url=settings.payment_success_url or None,
         cancel_url=settings.payment_cancel_url or None,
         webhook_secret_configured=bool(settings.payment_webhook_secret.strip()),
+        kaspi_qr_enabled=kaspi_pos_configured(),
+        kaspi_pos_base_url=settings.kaspi_pos_base_url or None,
     )
 
 
@@ -144,6 +150,45 @@ def get_my_invoice(invoice_id: UUID, db: Session = Depends(get_db), current_user
     return invoice
 
 
+@router.post("/invoices/{invoice_id}/kaspi/status", response_model=InvoicePublic)
+def refresh_kaspi_invoice_status(
+    invoice_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Invoice:
+    invoice = db.scalar(select(Invoice).where(Invoice.id == invoice_id, Invoice.user_id == current_user.id))
+    if invoice is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found")
+    if invoice.provider != KASPI_QR_PROVIDER:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invoice was not created with Kaspi QR")
+    previous_status = invoice.status
+    invoice = sync_kaspi_invoice_status(db, invoice)
+    if invoice.status != previous_status:
+        log_event(
+            db,
+            event_type="kaspi_invoice.status_changed",
+            actor_user=current_user,
+            target_user=current_user,
+            entity_type="invoice",
+            entity_id=invoice.id,
+            message="Kaspi QR invoice status changed",
+            payload={"previous_status": previous_status, "status": invoice.status},
+            request=request,
+        )
+        notify_user(
+            db,
+            user=current_user,
+            type=f"invoice.{invoice.status}",
+            title="Статус оплаты обновлен",
+            body=f"Kaspi QR счет получил статус: {invoice.status}.",
+            payload={"invoice_id": str(invoice.id), "provider": invoice.provider},
+        )
+    db.commit()
+    db.refresh(invoice)
+    return invoice
+
+
 @router.post("/webhook", response_model=PaymentPublic)
 async def payment_webhook(
     request: Request,
@@ -178,6 +223,42 @@ async def payment_webhook(
     db.commit()
     db.refresh(payment)
     return payment
+
+
+@router.post("/kaspi/webhook", response_model=InvoicePublic)
+async def kaspi_payment_webhook(
+    request: Request,
+    db: Session = Depends(get_db),
+    x_webhook_signature: str = Header(default=""),
+) -> Invoice:
+    raw_body = await request.body()
+    if not verify_kaspi_webhook_signature(raw_body, x_webhook_signature):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid Kaspi webhook signature")
+    payload = webhook_payload_from_raw(raw_body)
+    invoice = process_kaspi_webhook(db, payload=payload)
+    user = db.scalar(select(User).where(User.id == invoice.user_id))
+    log_event(
+        db,
+        event_type="kaspi.webhook_received",
+        target_user=user,
+        entity_type="invoice",
+        entity_id=invoice.id,
+        message="Kaspi QR webhook processed",
+        payload={"status": invoice.status, "provider_invoice_id": invoice.provider_invoice_id},
+        request=request,
+    )
+    if user is not None:
+        notify_user(
+            db,
+            user=user,
+            type=f"invoice.{invoice.status}",
+            title="Статус Kaspi QR обновлен",
+            body=f"Счет получил статус: {invoice.status}.",
+            payload={"invoice_id": str(invoice.id), "provider": invoice.provider},
+        )
+    db.commit()
+    db.refresh(invoice)
+    return invoice
 
 
 @router.post("/admin/plans", response_model=SubscriptionPlanPublic, status_code=status.HTTP_201_CREATED)

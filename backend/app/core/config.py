@@ -53,6 +53,14 @@ class Settings:
     payment_provider_name: str
     payment_checkout_mode: str
     payment_checkout_url_template: str
+    kaspi_pos_base_url: str
+    kaspi_pos_token_sn: str
+    kaspi_pos_vtoken_secret: str
+    kaspi_pos_profile_id: str
+    kaspi_pos_latitude: float
+    kaspi_pos_longitude: float
+    kaspi_pos_timeout_sec: float
+    kaspi_pos_webhook_secret: str
 
 
 @lru_cache
@@ -94,4 +102,12 @@ def get_settings() -> Settings:
         payment_provider_name=_getenv("PAYMENT_PROVIDER_NAME", default="manual"),
         payment_checkout_mode=_getenv("PAYMENT_CHECKOUT_MODE", default="manual"),
         payment_checkout_url_template=_getenv("PAYMENT_CHECKOUT_URL_TEMPLATE", default=""),
+        kaspi_pos_base_url=_getenv("KASPI_POS_BASE_URL", default="http://kaspi_pos:3000").rstrip("/"),
+        kaspi_pos_token_sn=_getenv("KASPI_POS_TOKEN_SN", default=""),
+        kaspi_pos_vtoken_secret=_getenv("KASPI_POS_VTOKEN_SECRET", default=""),
+        kaspi_pos_profile_id=_getenv("KASPI_POS_PROFILE_ID", default=""),
+        kaspi_pos_latitude=float(_getenv("KASPI_POS_LATITUDE", default="43.204643483375889")),
+        kaspi_pos_longitude=float(_getenv("KASPI_POS_LONGITUDE", default="76.891962364115912")),
+        kaspi_pos_timeout_sec=float(_getenv("KASPI_POS_TIMEOUT_SEC", default="15")),
+        kaspi_pos_webhook_secret=_getenv("KASPI_POS_WEBHOOK_SECRET", "PAYMENT_WEBHOOK_SECRET", default=""),
     )

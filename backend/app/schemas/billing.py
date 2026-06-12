@@ -141,3 +141,5 @@ class PaymentProviderPublic(BaseModel):
     success_url: str | None = None
     cancel_url: str | None = None
     webhook_secret_configured: bool
+    kaspi_qr_enabled: bool = False
+    kaspi_pos_base_url: str | None = None

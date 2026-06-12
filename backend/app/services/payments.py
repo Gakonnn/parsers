@@ -13,6 +13,13 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.models.billing import Invoice, InvoiceStatus, Payment, PaymentStatus, SubscriptionPlan, SubscriptionStatus, UserSubscription
 from app.models.user import User
+from app.services.kaspi_pos import (
+    KASPI_QR_PROVIDER,
+    classify_qr_status,
+    create_qr_for_invoice,
+    extract_qr_status,
+    fetch_qr_status,
+)
 
 
 def _now() -> datetime:
@@ -35,6 +42,7 @@ def find_plan(db: Session, *, plan_id: UUID | None = None, plan_code: str | None
 
 def create_invoice_for_plan(db: Session, *, user: User, plan: SubscriptionPlan, provider: str = "manual") -> Invoice:
     provider = (provider or "manual").strip().lower()
+    settings = get_settings()
     invoice = Invoice(
         user_id=user.id,
         plan_id=plan.id,
@@ -45,16 +53,38 @@ def create_invoice_for_plan(db: Session, *, user: User, plan: SubscriptionPlan, 
         expires_at=_now() + timedelta(hours=24),
         metadata_json={
             "plan_code": plan.code,
-            "success_url": get_settings().payment_success_url,
-            "cancel_url": get_settings().payment_cancel_url,
+            "success_url": settings.payment_success_url,
+            "cancel_url": settings.payment_cancel_url,
         },
     )
     db.add(invoice)
     db.flush()
-    # Provider integration can replace this URL with a real checkout link.
-    # Without a configured provider we keep it empty instead of exposing a non-production payment URL.
-    invoice.provider_invoice_id = str(invoice.id)
-    invoice.payment_url = _build_checkout_url(invoice, plan)
+
+    if provider == KASPI_QR_PROVIDER:
+        qr_response = create_qr_for_invoice(invoice)
+        qr_data = qr_response.get("Data") if isinstance(qr_response.get("Data"), dict) else {}
+        qr_operation_id = str(qr_data.get("QrOperationId") or "").strip()
+        qr_token = str(qr_data.get("QrToken") or "").strip()
+        invoice.provider_invoice_id = qr_operation_id
+        invoice.payment_url = qr_token
+        invoice.metadata_json = {
+            **(invoice.metadata_json or {}),
+            "kaspi_qr": {
+                "qr_operation_id": qr_operation_id,
+                "qr_token": qr_token,
+                "expire_date": qr_data.get("ExpireDate"),
+                "receipt_url": qr_data.get("ReceiptUrl"),
+                "amount": qr_data.get("Amount") or invoice.amount_kzt,
+                "status": qr_data.get("Status") or "QrTokenCreated",
+                "status_kind": "pending",
+                "created_response": qr_response,
+            },
+        }
+    else:
+        # Provider integration can replace this URL with a real checkout link.
+        # Without a configured provider we keep it empty instead of exposing a non-production payment URL.
+        invoice.provider_invoice_id = str(invoice.id)
+        invoice.payment_url = _build_checkout_url(invoice, plan)
     db.flush()
     return invoice
 
@@ -169,6 +199,90 @@ def process_payment_webhook(db: Session, *, payload: dict[str, Any]) -> Payment:
     db.add(payment)
     db.flush()
     return payment
+
+
+def _merge_invoice_metadata(invoice: Invoice, key: str, payload: dict[str, Any]) -> None:
+    metadata = dict(invoice.metadata_json or {})
+    existing = metadata.get(key) if isinstance(metadata.get(key), dict) else {}
+    metadata[key] = {**existing, **payload}
+    invoice.metadata_json = metadata
+
+
+def sync_kaspi_invoice_status(db: Session, invoice: Invoice) -> Invoice:
+    if invoice.provider != KASPI_QR_PROVIDER:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invoice is not a Kaspi QR invoice")
+    if invoice.status == InvoiceStatus.PAID.value:
+        return invoice
+    qr_operation_id = str(invoice.provider_invoice_id or "").strip()
+    if not qr_operation_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Kaspi QR operation id is missing")
+
+    status_payload = fetch_qr_status(qr_operation_id)
+    status_value = extract_qr_status(status_payload)
+    status_kind = classify_qr_status(status_value)
+    _merge_invoice_metadata(
+        invoice,
+        "kaspi_qr",
+        {
+            "qr_operation_id": qr_operation_id,
+            "status": status_value,
+            "status_kind": status_kind,
+            "last_status_response": status_payload,
+            "last_checked_at": _now().isoformat(),
+        },
+    )
+    if status_kind == "success":
+        mark_invoice_paid(db, invoice, provider_payment_id=qr_operation_id, raw_payload=status_payload)
+    elif status_kind == "expired":
+        invoice.status = InvoiceStatus.EXPIRED.value
+    elif status_kind == "failed":
+        invoice.status = InvoiceStatus.FAILED.value
+    db.flush()
+    return invoice
+
+
+def process_kaspi_webhook(db: Session, *, payload: dict[str, Any]) -> Invoice:
+    qr_operation_id = str(payload.get("paymentId") or payload.get("provider_invoice_id") or "").strip()
+    if not qr_operation_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="paymentId is required")
+    invoice = db.scalar(
+        select(Invoice).where(
+            Invoice.provider == KASPI_QR_PROVIDER,
+            Invoice.provider_invoice_id == qr_operation_id,
+        )
+    )
+    if invoice is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kaspi invoice not found")
+
+    event = str(payload.get("event") or "").strip()
+    status_value = str(payload.get("status") or "").strip()
+    status_kind = classify_qr_status(status_value)
+    if event == "payment.success":
+        status_kind = "success"
+    elif event == "payment.expired":
+        status_kind = "expired"
+    elif event == "payment.failed":
+        status_kind = "failed"
+
+    _merge_invoice_metadata(
+        invoice,
+        "kaspi_qr",
+        {
+            "qr_operation_id": qr_operation_id,
+            "status": status_value,
+            "status_kind": status_kind,
+            "last_webhook": payload,
+            "last_webhook_at": _now().isoformat(),
+        },
+    )
+    if status_kind == "success":
+        mark_invoice_paid(db, invoice, provider_payment_id=qr_operation_id, raw_payload=payload)
+    elif status_kind == "expired":
+        invoice.status = InvoiceStatus.EXPIRED.value
+    elif status_kind == "failed":
+        invoice.status = InvoiceStatus.FAILED.value
+    db.flush()
+    return invoice
 
 
 def webhook_payload_from_raw(raw_body: bytes) -> dict[str, Any]:

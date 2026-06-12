@@ -47,7 +47,9 @@ http://127.0.0.1:8000/docs
 - `POST /api/v1/billing/invoices`
 - `GET /api/v1/billing/invoices`
 - `GET /api/v1/billing/invoices/{invoice_id}`
+- `POST /api/v1/billing/invoices/{invoice_id}/kaspi/status`
 - `POST /api/v1/billing/webhook`
+- `POST /api/v1/billing/kaspi/webhook`
 - `POST /api/v1/billing/admin/plans`
 - `GET /api/v1/billing/admin/plans`
 - `PATCH /api/v1/billing/admin/plans/{plan_id}`
@@ -100,6 +102,9 @@ The payment layer is provider-agnostic:
 - `PAYMENT_CHECKOUT_URL_TEMPLATE` can point users to a real provider checkout page
 - `POST /api/v1/billing/webhook` accepts signed provider callbacks
 - admins can manually mark invoices as paid from protected admin endpoints
+- `provider=kaspi_qr` creates a Kaspi QR invoice through the bundled `kaspi_pos` service
+- `POST /api/v1/billing/invoices/{invoice_id}/kaspi/status` refreshes QR status and activates the plan after a successful payment
+- `POST /api/v1/billing/kaspi/webhook` accepts signed status callbacks from `kaspi_pos`
 
 Webhook signature header:
 
@@ -108,6 +113,22 @@ X-Payment-Signature: hmac_sha256(raw_body, PAYMENT_WEBHOOK_SECRET)
 ```
 
 When an invoice is paid, the backend automatically activates the selected subscription plan.
+
+### Kaspi QR setup
+
+The root `docker-compose.yml` includes `kaspi_pos`, a vendored integration based on `tapter-dev/kaspi-pos-automation`.
+
+Required production variables:
+
+```env
+KASPI_POS_TOKEN_SECRET_KEY=<64-char hex key from openssl rand -hex 32>
+KASPI_POS_TOKEN_SN=<Kaspi Pay session tokenSN>
+KASPI_POS_VTOKEN_SECRET=<encrypted Kaspi Pay vtokenSecret>
+KASPI_POS_PROFILE_ID=<optional profile id>
+KASPI_POS_WEBHOOK_SECRET=<shared HMAC secret for Kaspi callbacks>
+```
+
+`kaspi_pos` stores generated device/keypair/session tracking files in the `kaspi_pos_state` Docker volume, so rebuilds do not invalidate the device identity.
 
 ## Audit and notifications
 

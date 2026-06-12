@@ -123,11 +123,13 @@ export const api = {
   paymentProvider: () => apiRequest<PaymentProviderInfo>("/billing/provider"),
   plans: () => apiRequest<SubscriptionPlan[]>("/billing/plans"),
   invoices: () => apiRequest<ListResponse<Invoice>>("/billing/invoices?limit=30"),
-  createInvoice: (planCode: string) =>
+  createInvoice: (planCode: string, provider = "kaspi_qr") =>
     apiRequest<Invoice>("/billing/invoices", {
       method: "POST",
-      body: JSON.stringify({ plan_code: planCode, provider: "manual" }),
+      body: JSON.stringify({ plan_code: planCode, provider }),
     }),
+  syncKaspiInvoice: (invoiceId: string) =>
+    apiRequest<Invoice>(`/billing/invoices/${invoiceId}/kaspi/status`, { method: "POST" }),
   results: (source = "", allUsers = false) =>
     apiRequest<ListResponse<ParserResult> & { limit: number; offset: number }>(
       `/results?limit=80&all_users=${allUsers ? "true" : "false"}${source ? `&source=${encodeURIComponent(source)}` : ""}`,
