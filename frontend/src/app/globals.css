@@ -3459,3 +3459,350 @@ img {
     font-size: 17px;
   }
 }
+
+/* ParseHubFront production alignment */
+body {
+  background: #eff7ff;
+  font-family: "Inter Tight", "Poppins", "Segoe UI", sans-serif;
+}
+
+.parsehub-shell {
+  background:
+    radial-gradient(circle at 14% 12%, rgba(11, 99, 246, 0.08), transparent 26%),
+    radial-gradient(circle at 90% 18%, rgba(11, 114, 255, 0.1), transparent 24%),
+    #eff7ff;
+}
+
+.parsehub-dashboard-layout {
+  grid-template-columns: minmax(420px, 5fr) minmax(0, 7fr);
+  gap: 38px;
+  align-items: start;
+}
+
+.parsehub-launcher-card,
+.parsehub-history-card {
+  overflow: hidden;
+  border-radius: 42px;
+  background: #ffffff;
+}
+
+.parsehub-launcher-card {
+  padding: 42px 44px;
+}
+
+.parsehub-history-card {
+  padding: 42px 44px 34px;
+}
+
+.parsehub-launcher-card .launcher-header {
+  align-items: center;
+  margin-bottom: 34px;
+}
+
+.parsehub-launcher-card .source-switcher {
+  margin-bottom: 34px;
+}
+
+.parsehub-launcher-card .selector-card {
+  gap: 24px;
+  margin-top: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.parsehub-launcher-card .selector-title {
+  align-items: flex-end;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(11, 99, 246, 0.06);
+}
+
+.parsehub-launcher-card .selector-title strong {
+  color: rgba(15, 23, 42, 0.84);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.045em;
+}
+
+.parsehub-launcher-card .selector-title span {
+  max-width: 58%;
+  color: #6b7a96;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.35;
+  text-transform: lowercase;
+}
+
+.parsehub-launcher-card .selector-grid {
+  gap: 18px;
+}
+
+.parsehub-launcher-card .field-block {
+  margin-top: 0;
+}
+
+.parsehub-launcher-card .field-block span {
+  padding-left: 4px;
+  color: #6b7a96;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+}
+
+.parsehub-launcher-card .field-block input,
+.parsehub-launcher-card .field-block select {
+  min-height: 50px;
+  border-radius: 15px;
+  background: rgba(239, 247, 255, 0.62);
+  font-weight: 600;
+}
+
+.parsehub-launcher-card .url-control {
+  grid-template-columns: minmax(0, 1fr) 112px;
+}
+
+.parsehub-launcher-card .form-grid.two {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 22px;
+}
+
+.parsehub-launcher-card .hint-box {
+  min-height: 82px;
+  border: 1px solid rgba(245, 158, 11, 0.16);
+  background: rgba(255, 251, 235, 0.72);
+}
+
+.parsehub-launcher-card .hint-box strong {
+  color: #92400e;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.parsehub-launcher-card .hint-box span {
+  color: rgba(146, 64, 14, 0.72);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.parsehub-launcher-card .primary-button {
+  width: 100%;
+  min-height: 56px;
+  margin-top: 6px;
+  border-radius: 20px;
+  background: #0f172a;
+  box-shadow: 0 18px 34px rgba(15, 23, 42, 0.18);
+}
+
+.parsehub-history-heading {
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.parsehub-refresh-button {
+  min-height: 44px;
+  padding: 0 24px;
+  border-radius: 15px;
+  background: #ffffff;
+}
+
+.parsehub-history-card .table-card {
+  border-radius: 0;
+}
+
+.parsehub-history-card .jobs-table .table-row {
+  grid-template-columns: 0.72fr 0.72fr minmax(180px, 1.2fr) 0.86fr 1fr;
+  min-height: 80px;
+}
+
+.parsehub-history-card .table-head {
+  min-height: 62px;
+  border-radius: 28px 28px 0 0;
+}
+
+.parsehub-billing-hero {
+  min-height: 176px;
+  padding: 42px 44px;
+  border-radius: 42px;
+  background: #ffffff;
+}
+
+.parsehub-billing-hero h2 {
+  font-size: clamp(38px, 4.4vw, 64px);
+}
+
+.parsehub-pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 32px;
+  align-items: stretch;
+}
+
+.parsehub-public-pricing-grid {
+  max-width: 1728px;
+}
+
+.parsehub-plan-card,
+.public-plan-card.parsehub-plan-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 520px;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  border-radius: 42px;
+  background: #ffffff;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.035), 0 0 0 1px rgba(11, 99, 246, 0.045);
+}
+
+.parsehub-plan-card.selected {
+  box-shadow: 0 24px 70px rgba(11, 99, 246, 0.16), 0 0 0 2px rgba(11, 99, 246, 0.18);
+}
+
+.parsehub-plan-band {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 54px;
+  color: #64748b;
+  background: rgba(248, 250, 252, 0.92);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.parsehub-plan-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: 42px;
+}
+
+.parsehub-plan-body h2,
+.parsehub-plan-body h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: clamp(28px, 2.2vw, 34px);
+  font-weight: 750;
+  letter-spacing: -0.06em;
+}
+
+.parsehub-plan-body p {
+  min-height: 44px;
+  margin: 14px 0 34px;
+  color: #6b7a96;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.parsehub-price {
+  color: #0b63f6 !important;
+  font-size: clamp(38px, 4vw, 56px) !important;
+  font-weight: 760 !important;
+  line-height: 0.95;
+  letter-spacing: -0.065em;
+}
+
+.parsehub-price-period {
+  margin-top: 8px;
+  color: #6b7a96;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.parsehub-plan-body ul {
+  display: grid;
+  gap: 0;
+  margin: 42px 0 28px;
+  padding: 0;
+  list-style: none;
+}
+
+.parsehub-plan-body li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 15px 0;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.055);
+  color: #0f172a;
+}
+
+.parsehub-plan-body li span {
+  color: #6b7a96;
+  font-weight: 500;
+}
+
+.parsehub-plan-body li strong {
+  color: #0f172a;
+  font-weight: 750;
+}
+
+.parsehub-plan-body li em {
+  padding: 5px 11px;
+  border: 1px solid rgba(11, 99, 246, 0.18);
+  border-radius: 999px;
+  color: #0b63f6;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.parsehub-plan-button,
+.parsehub-plan-body .primary-button {
+  margin-top: auto;
+  min-height: 62px;
+  border-radius: 20px;
+  background: #0f172a;
+}
+
+.parsehub-plan-button:disabled,
+.parsehub-plan-body .primary-button[aria-disabled="true"] {
+  color: #ffffff;
+  background: #86a9f8;
+  opacity: 1;
+}
+
+.parsehub-invoices-card {
+  margin-top: 34px;
+  padding: 42px 44px;
+  border-radius: 42px;
+}
+
+@media (max-width: 1180px) {
+  .parsehub-dashboard-layout,
+  .parsehub-pricing-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .parsehub-launcher-card,
+  .parsehub-history-card,
+  .parsehub-billing-hero,
+  .parsehub-invoices-card {
+    padding: 26px;
+    border-radius: 30px;
+  }
+
+  .parsehub-launcher-card .selector-grid,
+  .parsehub-launcher-card .form-grid.two {
+    grid-template-columns: 1fr;
+  }
+
+  .parsehub-history-card .jobs-table {
+    min-width: 720px;
+  }
+
+  .parsehub-plan-body {
+    padding: 30px;
+  }
+}

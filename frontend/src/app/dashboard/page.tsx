@@ -4,20 +4,25 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { JobLauncher } from "@/components/job-launcher";
 import { JobList } from "@/components/job-list";
-import { MetricCard } from "@/components/metric-card";
-import { ProgressRing } from "@/components/progress-ring";
 import { api } from "@/lib/api";
-import { percent } from "@/lib/format";
-import type { ParserJob, UsageSummary } from "@/lib/types";
+import type { ParserJob } from "@/lib/types";
 
 export default function DashboardPage() {
   const [jobs, setJobs] = useState<ParserJob[]>([]);
-  const [usage, setUsage] = useState<UsageSummary | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   async function load() {
-    const [jobsResponse, usageResponse] = await Promise.all([api.jobs(false), api.usage().catch(() => null)]);
+    const jobsResponse = await api.jobs(false);
     setJobs(jobsResponse.items);
-    setUsage(usageResponse);
+  }
+
+  async function refresh() {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   useEffect(() => {
@@ -26,34 +31,20 @@ export default function DashboardPage() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const activeJobs = jobs.filter((job) => ["pending", "running"].includes(job.status)).length;
-  const completed = jobs.filter((job) => job.status === "completed").length;
-  const recordsPercent = usage ? percent(usage.records_used, usage.subscription.plan.max_records_per_month) : 0;
-
   return (
-    <AppShell eyebrow="Операционный центр" title="Панель управления">
-      <section className="dashboard-grid">
-        <MetricCard label="Активные задачи" value={activeJobs} note="очередь и выполнение" tone={activeJobs ? "warn" : "neutral"} />
-        <MetricCard label="Успешные запуски" value={completed} note="последние задачи" tone="good" />
-        <MetricCard label="Тариф" value={usage?.subscription.plan.name || "—"} note={`${usage?.jobs_remaining ?? 0} запусков осталось`} />
-        <div className="usage-card">
-          <ProgressRing value={recordsPercent} label="records" />
-          <div>
-            <span className="eyebrow">Лимит записей</span>
-            <strong>{usage?.records_used ?? 0} / {usage?.subscription.plan.max_records_per_month ?? 0}</strong>
-            <p>Месячное использование по текущему тарифу.</p>
-          </div>
-        </div>
-      </section>
-
-      <section className="split-layout">
+    <AppShell eyebrow="Парсеры" title="Рабочий стол">
+      <section className="split-layout parsehub-dashboard-layout">
         <JobLauncher onCreated={(job) => setJobs((items) => [job, ...items])} />
-        <div className="panel-card">
-          <div className="section-heading">
-            <span className="eyebrow">Последняя активность</span>
-            <h2>Последние задачи</h2>
+        <div className="panel-card parsehub-history-card">
+          <div className="section-heading horizontal parsehub-history-heading">
+            <div>
+              <span className="eyebrow">История</span>
+            </div>
+            <button className="ghost-button parsehub-refresh-button" disabled={refreshing} onClick={refresh} type="button">
+              {refreshing ? "Обновляем" : "Обновить"}
+            </button>
           </div>
-          <JobList jobs={jobs.slice(0, 6)} compact />
+          <JobList jobs={jobs.slice(0, 6)} />
         </div>
       </section>
     </AppShell>

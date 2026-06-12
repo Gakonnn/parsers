@@ -7,6 +7,15 @@ import { api } from "@/lib/api";
 import { formatDate, formatMoney } from "@/lib/format";
 import type { Invoice, SubscriptionPlan, UsageSummary } from "@/lib/types";
 
+function limitLabel(value: number, suffix: string): string {
+  return value === -1 ? "Безлимит" : `${value}${suffix ? ` ${suffix}` : ""}`;
+}
+
+function perRecordLabel(plan: SubscriptionPlan): string {
+  if (plan.max_records_per_month <= 0 || plan.price_kzt <= 0) return formatMoney(0, plan.currency);
+  return formatMoney(Math.ceil(plan.price_kzt / plan.max_records_per_month), plan.currency);
+}
+
 export default function BillingPage() {
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
@@ -41,7 +50,7 @@ export default function BillingPage() {
 
   return (
     <AppShell eyebrow="Оплата" title="Тарифы и оплата">
-      <section className="billing-hero">
+      <section className="billing-hero parsehub-billing-hero">
         <div>
           <span className="eyebrow">Текущий тариф</span>
           <h2>{usage?.subscription.plan.name || "—"}</h2>
@@ -50,28 +59,38 @@ export default function BillingPage() {
         <StatusPill status={usage?.subscription.status || "active"} />
       </section>
 
-      <section className="plans-grid">
+      <section className="plans-grid parsehub-pricing-grid">
         {plans.map((plan) => (
-          <article className="plan-card" key={plan.id}>
-            <span className="soft-badge">{plan.code}</span>
-            <h3>{plan.name}</h3>
-            <p>{plan.description || "Тариф для управления парсерами и выгрузками."}</p>
-            <strong>{formatMoney(plan.price_kzt, plan.currency)}</strong>
-            <ul>
-              <li>{plan.max_jobs_per_month === -1 ? "Безлимит" : plan.max_jobs_per_month} запусков / месяц</li>
-              <li>{plan.max_records_per_month === -1 ? "Безлимит" : plan.max_records_per_month} записей / месяц</li>
-              <li>{plan.allowed_sources.length ? plan.allowed_sources.join(", ") : "Все источники"}</li>
-            </ul>
-            <button className="primary-button wide" type="button" onClick={() => createInvoice(plan.code)}>Выбрать тариф</button>
+          <article className={`plan-card parsehub-plan-card${usage?.subscription.plan.code === plan.code ? " selected" : ""}`} key={plan.id}>
+            <div className="parsehub-plan-band">{plan.code}</div>
+            <div className="parsehub-plan-body">
+              <h3>{plan.name}</h3>
+              <p>{plan.description || "Премиальные лимиты для ваших задач."}</p>
+              <strong className="parsehub-price">{formatMoney(plan.price_kzt, plan.currency)}</strong>
+              <span className="parsehub-price-period">в месяц</span>
+              <ul>
+                <li><span>Запусков:</span><strong>{limitLabel(plan.max_jobs_per_month, "")}</strong></li>
+                <li><span>Записей:</span><strong>{limitLabel(plan.max_records_per_month, "")}</strong></li>
+                <li><span>Цена за 1 запись:</span><em>{perRecordLabel(plan)}</em></li>
+              </ul>
+              <button
+                className="primary-button wide parsehub-plan-button"
+                disabled={usage?.subscription.plan.code === plan.code}
+                type="button"
+                onClick={() => createInvoice(plan.code)}
+              >
+                {usage?.subscription.plan.code === plan.code ? "Выбрано" : "Выбрать тариф"}
+              </button>
+            </div>
           </article>
         ))}
       </section>
 
       {message ? <p className="form-message">{message}</p> : null}
 
-      <section className="panel-card">
+      <section className="panel-card parsehub-invoices-card">
         <div className="section-heading">
-          <span className="eyebrow">Счета</span>
+          <span className="eyebrow">Документация</span>
           <h2>История счетов</h2>
         </div>
         <div className="data-table invoices-table">

@@ -8,7 +8,12 @@ import { formatMoney } from "@/lib/format";
 import type { SubscriptionPlan } from "@/lib/types";
 
 function limitText(value: number, unit: string): string {
-  return value === -1 ? `Безлимит ${unit}` : `${value} ${unit}`;
+  return value === -1 ? `Безлимит${unit ? ` ${unit}` : ""}` : `${value}${unit ? ` ${unit}` : ""}`;
+}
+
+function perRecordText(plan: SubscriptionPlan): string {
+  if (plan.max_records_per_month <= 0 || plan.price_kzt <= 0) return formatMoney(0, plan.currency);
+  return formatMoney(Math.ceil(plan.price_kzt / plan.max_records_per_month), plan.currency);
 }
 
 export default function FinancePage() {
@@ -41,20 +46,24 @@ export default function FinancePage() {
           <p>{error}</p>
         </section>
       ) : plans.length ? (
-        <section className="public-pricing-grid">
+        <section className="public-pricing-grid parsehub-pricing-grid parsehub-public-pricing-grid">
           {plans.map((plan) => (
-            <article className="public-plan-card" key={plan.id}>
-              <span className="soft-badge">{plan.code}</span>
-              <strong>{formatMoney(plan.price_kzt, plan.currency)}</strong>
-              <p>{plan.description || plan.name}</p>
+            <article className="public-plan-card parsehub-plan-card" key={plan.id}>
+              <div className="parsehub-plan-band">{plan.code}</div>
+              <div className="parsehub-plan-body">
+              <h2>{plan.name}</h2>
+              <p>{plan.description || "Премиальные лимиты для ваших задач."}</p>
+              <strong className="parsehub-price">{formatMoney(plan.price_kzt, plan.currency)}</strong>
+              <span className="parsehub-price-period">в месяц</span>
               <ul>
-                <li>{limitText(plan.max_jobs_per_month, "запусков / месяц")}</li>
-                <li>{limitText(plan.max_records_per_month, "записей / месяц")}</li>
-                <li>{plan.allowed_sources.length ? plan.allowed_sources.join(", ") : "Все источники"}</li>
+                <li><span>Запусков:</span><strong>{limitText(plan.max_jobs_per_month, "")}</strong></li>
+                <li><span>Записей:</span><strong>{limitText(plan.max_records_per_month, "")}</strong></li>
+                <li><span>Цена за 1 запись:</span><em>{perRecordText(plan)}</em></li>
               </ul>
               <Link className="primary-button wide" href="/register">
                 Подключить тариф
               </Link>
+              </div>
             </article>
           ))}
         </section>

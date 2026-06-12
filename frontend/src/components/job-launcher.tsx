@@ -237,11 +237,10 @@ export function JobLauncher({ onCreated }: { onCreated?: (job: ParserJob) => voi
   }
 
   return (
-    <form className="launcher-card" onSubmit={submit}>
+    <form className="launcher-card parsehub-launcher-card" onSubmit={submit}>
       <div className="launcher-header">
         <div>
           <span className="eyebrow">Новый запуск</span>
-          <h2>Создать задачу парсинга</h2>
         </div>
         <span className="soft-badge">готово к запуску</span>
       </div>
