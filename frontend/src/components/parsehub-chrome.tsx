@@ -94,6 +94,8 @@ export function ParseHubHeader({
 }) {
   const pathname = usePathname();
   const [isScrolled, setIsScrolled] = useState(false);
+  const [isLogoZoomed, setIsLogoZoomed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const navigation = mode === "app" ? appNavigation : publicNavigation;
 
   useEffect(() => {
@@ -103,44 +105,171 @@ export function ParseHubHeader({
     return () => window.removeEventListener("scroll", update);
   }, []);
 
-  return (
-    <header className={`parsehub-header${isScrolled ? " is-scrolled" : ""}`}>
-      <div className="parsehub-header-inner">
-        <Link className="parsehub-brand" href={mode === "app" ? "/dashboard" : "/"} aria-label="ParseHub">
-          <span className="parsehub-logo-wrap"><img src="/logo/logo.png" alt="" /></span>
-          <strong>ParseHub</strong>
-        </Link>
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [pathname]);
 
-        <nav className="parsehub-nav" aria-label={mode === "app" ? "Основная навигация" : "Публичная навигация"}>
+  useEffect(() => {
+    document.body.classList.toggle("parsehub-mobile-menu-open", isMobileMenuOpen);
+    return () => document.body.classList.remove("parsehub-mobile-menu-open");
+  }, [isMobileMenuOpen]);
+
+  const closeMobileMenu = () => setIsMobileMenuOpen(false);
+
+  return (
+    <>
+      <header className={`parsehub-header${isScrolled ? " is-scrolled" : ""}`}>
+        <div className="parsehub-header-inner">
+          <Link className="parsehub-brand" href={mode === "app" ? "/dashboard" : "/"} aria-label="ParseHub">
+            <span
+              className="parsehub-logo-wrap"
+              onMouseEnter={() => setIsLogoZoomed(true)}
+              onMouseLeave={() => setIsLogoZoomed(false)}
+              onMouseDown={() => setIsLogoZoomed(true)}
+              onMouseUp={() => setIsLogoZoomed(false)}
+            >
+              <img src="/logo/logo.png" alt="" />
+            </span>
+            <strong>ParseHub</strong>
+          </Link>
+
+          <nav className="parsehub-nav" aria-label={mode === "app" ? "Основная навигация" : "Публичная навигация"}>
+            {navigation.map((item) => {
+              const active = pathname === item.href || item.aliases?.includes(pathname);
+              return (
+                <Link className={active ? "active" : ""} href={item.href} key={item.href}>
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+
+          <div className="parsehub-userbar">
+            {mode === "app" ? (
+              <>
+                <Link className="parsehub-login-link" href="/notifications">
+                  Уведомления{notificationsCount ? ` (${notificationsCount})` : ""}
+                </Link>
+                <button className="parsehub-register-link" type="button" onClick={onLogout}>
+                  Выйти
+                </button>
+              </>
+            ) : (
+              <>
+                <Link className="parsehub-login-link" href="/login">Вход</Link>
+                <Link className="parsehub-register-link" href="/register">Регистрация</Link>
+              </>
+            )}
+          </div>
+
+          <button
+            aria-controls="parsehub-mobile-menu"
+            aria-expanded={isMobileMenuOpen}
+            aria-label={isMobileMenuOpen ? "Закрыть меню" : "Открыть меню"}
+            className="parsehub-mobile-trigger"
+            onClick={() => setIsMobileMenuOpen((value) => !value)}
+            type="button"
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+        </div>
+      </header>
+
+      <div
+        aria-hidden={!isMobileMenuOpen}
+        className={`parsehub-mobile-overlay${isMobileMenuOpen ? " open" : ""}`}
+        onClick={closeMobileMenu}
+      />
+      <aside
+        aria-hidden={!isMobileMenuOpen}
+        className={`parsehub-mobile-panel${isMobileMenuOpen ? " open" : ""}`}
+        id="parsehub-mobile-menu"
+      >
+        <div className="parsehub-mobile-panel-head">
+          <span>Навигация</span>
+          <button aria-label="Закрыть меню" onClick={closeMobileMenu} type="button">×</button>
+        </div>
+        <nav aria-label="Мобильная навигация">
           {navigation.map((item) => {
             const active = pathname === item.href || item.aliases?.includes(pathname);
             return (
-              <Link className={active ? "active" : ""} href={item.href} key={item.href}>
-                {item.label}
+              <Link className={active ? "active" : ""} href={item.href} key={item.href} onClick={closeMobileMenu}>
+                <MobileNavIcon label={item.label} />
+                <span>{item.label}</span>
               </Link>
             );
           })}
         </nav>
-
-        <div className="parsehub-userbar">
+        <div className="parsehub-mobile-actions">
           {mode === "app" ? (
             <>
-              <Link className="parsehub-login-link" href="/notifications">
+              <Link href="/notifications" onClick={closeMobileMenu}>
                 Уведомления{notificationsCount ? ` (${notificationsCount})` : ""}
               </Link>
-              <button className="parsehub-register-link" type="button" onClick={onLogout}>
+              <button
+                type="button"
+                onClick={() => {
+                  closeMobileMenu();
+                  onLogout?.();
+                }}
+              >
                 Выйти
               </button>
             </>
           ) : (
             <>
-              <Link className="parsehub-login-link" href="/login">Вход</Link>
-              <Link className="parsehub-register-link" href="/register">Регистрация</Link>
+              <Link href="/login" onClick={closeMobileMenu}>Вход</Link>
+              <Link className="primary" href="/register" onClick={closeMobileMenu}>Регистрация</Link>
             </>
           )}
         </div>
-      </div>
-    </header>
+      </aside>
+
+      {isLogoZoomed && (
+        <div className="parsehub-logo-preview" aria-hidden="true">
+          <img src="/logo/logo.png" alt="" />
+        </div>
+      )}
+    </>
+  );
+}
+
+function MobileNavIcon({ label }: { label: string }) {
+  const normalized = label.toLowerCase();
+  if (normalized.includes("обзор")) {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h4A1.5 1.5 0 0 1 11 5.5v4A1.5 1.5 0 0 1 9.5 11h-4A1.5 1.5 0 0 1 4 9.5v-4Zm9 0A1.5 1.5 0 0 1 14.5 4h4A1.5 1.5 0 0 1 20 5.5v4a1.5 1.5 0 0 1-1.5 1.5h-4A1.5 1.5 0 0 1 13 9.5v-4ZM4 14.5A1.5 1.5 0 0 1 5.5 13h4a1.5 1.5 0 0 1 1.5 1.5v4A1.5 1.5 0 0 1 9.5 20h-4A1.5 1.5 0 0 1 4 18.5v-4Zm9 0a1.5 1.5 0 0 1 1.5-1.5h4a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-4a1.5 1.5 0 0 1-1.5-1.5v-4Z" />
+      </svg>
+    );
+  }
+  if (normalized.includes("парсер")) {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M7 4h10a2 2 0 0 1 2 2v12.4a1.6 1.6 0 0 1-2.42 1.38L12 17.05l-4.58 2.73A1.6 1.6 0 0 1 5 18.4V6a2 2 0 0 1 2-2Zm2 5h6m-6 4h4" />
+      </svg>
+    );
+  }
+  if (normalized.includes("результ")) {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M5 19V5h14v14H5Zm4-4 2.4-3 2 2.1L16 10" />
+      </svg>
+    );
+  }
+  if (normalized.includes("тариф")) {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M5 7h14v10H5V7Zm2.5 3h3m5 4h.01M9 14h.01" />
+      </svg>
+    );
+  }
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7 8a7 7 0 0 0-14 0" />
+    </svg>
   );
 }
 
