@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
+import { ParseHubFooter, ParseHubHeader } from "@/components/parsehub-chrome";
 import { api, getToken, setToken } from "@/lib/api";
 
 export function AuthScreen({ mode }: { mode: "login" | "register" }) {
@@ -44,25 +45,7 @@ export function AuthScreen({ mode }: { mode: "login" | "register" }) {
 
   return (
     <div className="parsehub-shell parsehub-public-shell">
-      <header className="parsehub-header">
-        <div className="parsehub-header-inner">
-          <Link className="parsehub-brand" href="/">
-            <span className="parsehub-logo-wrap"><img src="/logo/logo.png" alt="" /></span>
-            <strong>ParseHub</strong>
-          </Link>
-          <nav className="parsehub-nav" aria-label="Публичная навигация">
-            <Link href="/">Обзор</Link>
-            <Link href="/marketing">Парсеры</Link>
-            <Link href="/structure">Результаты</Link>
-            <Link href="/finance">Тарифы</Link>
-            <Link href="/profile">Кабинет</Link>
-          </nav>
-          <div className="parsehub-userbar">
-            <Link className="parsehub-login-link" href="/login">Вход</Link>
-            <Link className="parsehub-register-link" href="/register">Регистрация</Link>
-          </div>
-        </div>
-      </header>
+      <ParseHubHeader mode="public" />
 
       <main className="parsehub-auth-main">
         <section className="parsehub-auth-card">
@@ -118,29 +101,7 @@ export function AuthScreen({ mode }: { mode: "login" | "register" }) {
         </section>
       </main>
 
-      <footer className="parsehub-footer">
-        <div>
-          <h3>Документы и информация</h3>
-          <Link href="/about">О нас</Link>
-          <Link href="/privacy">Политика конфиденциальности</Link>
-          <Link href="/offer">Оферта</Link>
-          <Link href="/payment">Оплата</Link>
-          <Link href="/guide">Инструкция</Link>
-        </div>
-        <div>
-          <h3>Социальные сети</h3>
-          <div className="parsehub-socials">
-            <a href="#" aria-label="YouTube">YT</a>
-            <a href="#" aria-label="Instagram">IG</a>
-            <a href="#" aria-label="Telegram">TG</a>
-            <a href="#" aria-label="WhatsApp">WA</a>
-          </div>
-        </div>
-        <div>
-          <h3>Служба поддержки ParseHub</h3>
-          <p>Поддержка по задачам, выгрузкам, тарифам и настройкам доступа.</p>
-        </div>
-      </footer>
+      <ParseHubFooter />
     </div>
   );
 }
