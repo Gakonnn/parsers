@@ -12,8 +12,6 @@ const navigation = [
   { href: "/structure", label: "Результаты", aliases: ["/results"] },
   { href: "/billing", label: "Тарифы", aliases: ["/orders", "/cart"] },
   { href: "/profile", label: "Кабинет", aliases: ["/settings"] },
-  { href: "/notifications", label: "Уведомления" },
-  { href: "/admin", label: "Админка", adminOnly: true },
 ];
 
 export function AppShell({ children, eyebrow, title, actions }: { children: ReactNode; eyebrow: string; title: string; actions?: ReactNode }) {
@@ -25,7 +23,7 @@ export function AppShell({ children, eyebrow, title, actions }: { children: Reac
 
   useEffect(() => {
     if (!getToken()) {
-      router.replace("/");
+      router.replace("/login");
       return;
     }
     let active = true;
@@ -37,7 +35,7 @@ export function AppShell({ children, eyebrow, title, actions }: { children: Reac
       })
       .catch(() => {
         clearToken();
-        router.replace("/");
+        router.replace("/login");
       })
       .finally(() => active && setReady(true));
     return () => {
@@ -65,8 +63,6 @@ export function AppShell({ children, eyebrow, title, actions }: { children: Reac
     return () => window.removeEventListener("parserdesk:user-updated", refreshUser);
   }, []);
 
-  const visibleNavigation = navigation.filter((item) => !item.adminOnly || user?.role === "admin");
-
   return (
     <div className="parsehub-shell">
       <header className="parsehub-header">
@@ -79,7 +75,7 @@ export function AppShell({ children, eyebrow, title, actions }: { children: Reac
           </Link>
 
           <nav className="parsehub-nav" aria-label="Основная навигация">
-            {visibleNavigation.map((item) => (
+            {navigation.map((item) => (
               <Link key={item.href} className={pathname === item.href || item.aliases?.includes(pathname) ? "active" : ""} href={item.href}>
                 {item.label}
               </Link>
@@ -87,19 +83,15 @@ export function AppShell({ children, eyebrow, title, actions }: { children: Reac
           </nav>
 
           <div className="parsehub-userbar">
-            <Link className="parsehub-notice" href="/notifications">
-              <span>{notifications?.unread_total || 0}</span>
-              новых
+            <Link className="parsehub-login-link" href="/notifications">
+              Уведомления{notifications?.unread_total ? ` (${notifications.unread_total})` : ""}
             </Link>
-            <span className="parsehub-account" title={user?.email || ""}>
-              {user?.full_name || user?.email || "Загрузка"}
-            </span>
             <button
-              className="parsehub-logout"
+              className="parsehub-register-link"
               type="button"
               onClick={() => {
                 clearToken();
-                router.replace("/");
+                router.replace("/login");
               }}
             >
               Выйти

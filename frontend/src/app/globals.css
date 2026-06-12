@@ -2519,7 +2519,8 @@ img {
 }
 
 .parsehub-nav a,
-.parsehub-logout,
+.parsehub-login-link,
+.parsehub-register-link,
 .parsehub-notice {
   min-height: 44px;
   border-radius: 14px;
@@ -2551,14 +2552,15 @@ img {
   min-width: 0;
 }
 
+.parsehub-login-link,
 .parsehub-notice {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 0 14px;
+  padding: 0 18px;
   color: #0b63f6;
-  background: rgba(255, 255, 255, 0.66);
-  box-shadow: var(--shadow-border);
+  background: transparent;
 }
 
 .parsehub-notice span {
@@ -2582,20 +2584,25 @@ img {
   white-space: nowrap;
 }
 
-.parsehub-logout {
+.parsehub-register-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
-  padding: 0 30px;
+  padding: 0 32px;
   color: #ffffff;
   background: #0b63f6;
   box-shadow: 0 14px 26px rgba(11, 99, 246, 0.24);
 }
 
-.parsehub-logout:hover,
+.parsehub-register-link:hover,
+.parsehub-login-link:hover,
 .parsehub-notice:hover {
   transform: translateY(-1px);
 }
 
-.parsehub-logout:active,
+.parsehub-register-link:active,
+.parsehub-login-link:active,
 .parsehub-notice:active,
 .parsehub-nav a:active {
   transform: translateY(0) scale(0.96);
@@ -2605,6 +2612,10 @@ img {
   width: min(1728px, calc(100% - 48px));
   margin: 0 auto;
   padding: 0 0 68px;
+}
+
+.parsehub-public-shell .parsehub-main {
+  animation: rise-in 520ms var(--ease-standard) both;
 }
 
 .parsehub-shell .topbar {
@@ -2628,6 +2639,10 @@ img {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 34px;
   margin-bottom: 46px;
+}
+
+.parsehub-plan-name {
+  color: #0b63f6 !important;
 }
 
 .metric-card,
@@ -2896,6 +2911,23 @@ img {
   background: rgba(248, 250, 252, 0.84);
 }
 
+.home-table .table-row {
+  grid-template-columns: 0.9fr 0.78fr minmax(220px, 2fr) 0.9fr;
+}
+
+.parsehub-home-table {
+  padding: 42px 44px 34px;
+  border-radius: 42px;
+}
+
+.parsehub-home-table .section-heading {
+  margin-bottom: 28px;
+}
+
+.parsehub-home-table .table-card {
+  border-radius: 0;
+}
+
 .source-cell {
   color: #0f172a;
   font-size: 15px;
@@ -2932,6 +2964,126 @@ img {
   color: rgba(255, 255, 255, 0.62);
   background: linear-gradient(135deg, #0b72ff 0%, #1740a4 56%, #050915 100%);
   box-shadow: 0 -18px 48px rgba(0, 0, 0, 0.36);
+}
+
+.parsehub-auth-main {
+  display: grid;
+  min-height: calc(100vh - 260px);
+  place-items: center;
+  padding: 24px;
+}
+
+.parsehub-auth-card {
+  width: min(448px, 100%);
+  overflow: hidden;
+  border-radius: 40px;
+  background: #ffffff;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.12);
+  animation: rise-in 480ms var(--ease-standard) both;
+}
+
+.parsehub-auth-logo {
+  position: relative;
+  width: 70px;
+  height: 70px;
+  margin: 40px auto 14px;
+}
+
+.parsehub-auth-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  outline: 0;
+}
+
+.parsehub-auth-copy {
+  padding: 0 40px 22px;
+  text-align: center;
+}
+
+.parsehub-auth-copy h1 {
+  margin: 0;
+  color: #0b63f6;
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.055em;
+}
+
+.parsehub-auth-copy p {
+  margin: 6px 0 0;
+  color: #6b7a96;
+  font-size: 12px;
+  font-weight: 300;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.parsehub-auth-form {
+  display: grid;
+  gap: 18px;
+  padding: 0 40px 34px;
+}
+
+.parsehub-auth-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  border: 0;
+  border-radius: 20px;
+  color: #ffffff;
+  background: #0b63f6;
+  box-shadow: 0 14px 30px rgba(11, 99, 246, 0.2);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  transition-property: opacity, transform, box-shadow;
+  transition-duration: 180ms;
+  transition-timing-function: var(--ease-out);
+}
+
+.parsehub-auth-submit:hover {
+  opacity: 0.92;
+  box-shadow: 0 18px 38px rgba(11, 99, 246, 0.26);
+}
+
+.parsehub-auth-submit:active {
+  transform: scale(0.96);
+}
+
+.parsehub-agreement {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: #6b7a96;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.parsehub-agreement input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: #0b63f6;
+}
+
+.parsehub-agreement a,
+.parsehub-auth-footer a {
+  color: #0b63f6;
+  font-weight: 700;
+}
+
+.parsehub-auth-footer {
+  padding: 24px 40px 34px;
+  border-top: 1px solid rgba(15, 23, 42, 0.06);
+  background: rgba(239, 247, 255, 0.34);
+  text-align: center;
+}
+
+.parsehub-auth-footer p {
+  margin: 0;
+  color: #6b7a96;
+  font-size: 13px;
 }
 
 .parsehub-footer h3 {

@@ -1,164 +1,167 @@
+"use client";
+
 import Link from "next/link";
+import type { CSSProperties } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { api, getToken } from "@/lib/api";
+import { formatDate, percent } from "@/lib/format";
+import type { ParserJob, UsageSummary } from "@/lib/types";
 
-const configuredApiBase = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
+type HomeTask = {
+  id: string;
+  source: string;
+  status: string;
+  progress: number;
+  count: string;
+  date: string;
+};
 
-const authScript = `
-(() => {
-  const TOKEN_KEY = "parsers_platform_token";
-  const configuredApiBase = ${JSON.stringify(configuredApiBase)};
-  const apiBase = configuredApiBase || window.location.protocol + "//" + window.location.hostname + ":8000/api/v1";
+const fallbackTasks: HomeTask[] = [
+  { id: "demo-1", source: "2GIS", status: "Готово", progress: 100, count: "10/10", date: "08 июн., 12:38" },
+  { id: "demo-2", source: "2GIS", status: "Готово", progress: 100, count: "100/100", date: "07 июн., 17:57" },
+];
 
-  function humanize(message) {
-    if (message === "Incorrect email or password") return "Неверный email или пароль.";
-    if (message === "User with this email already exists") return "Пользователь с таким email уже зарегистрирован.";
-    if (message === "User account is disabled") return "Аккаунт отключен. Обратитесь к администратору.";
-    return message || "Не удалось выполнить запрос.";
-  }
-
-  function ready(fn) {
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", fn, { once: true });
-    else fn();
-  }
-
-  ready(() => {
-    if (window.localStorage.getItem(TOKEN_KEY)) {
-      window.location.replace("/dashboard");
-      return;
-    }
-
-    const form = document.querySelector("[data-auth-form]");
-    const modeInput = document.querySelector("[data-auth-mode]");
-    const nameField = document.querySelector("[data-name-field]");
-    const title = document.querySelector("[data-auth-title]");
-    const helper = document.querySelector("[data-auth-helper]");
-    const submit = document.querySelector("[data-auth-submit]");
-    const message = document.querySelector("[data-auth-message]");
-    const tabs = Array.from(document.querySelectorAll("[data-auth-tab]"));
-
-    function setMode(mode) {
-      if (!modeInput || !nameField || !title || !helper || !submit) return;
-      const isRegister = mode === "register";
-      modeInput.value = mode;
-      nameField.hidden = !isRegister;
-      const nameInput = nameField.querySelector("input");
-      if (nameInput) nameInput.required = isRegister;
-      title.textContent = isRegister ? "Создать аккаунт" : "Войти в кабинет";
-      helper.textContent = isRegister
-        ? "Создайте рабочий аккаунт для запуска парсеров и выгрузки результатов."
-        : "Введите email и пароль, чтобы продолжить работу с задачами.";
-      submit.textContent = isRegister ? "Создать аккаунт" : "Войти";
-      tabs.forEach((button) => button.classList.toggle("active", button.dataset.authTab === mode));
-      if (message) message.textContent = "";
-    }
-
-    tabs.forEach((button) => {
-      button.addEventListener("click", () => setMode(button.dataset.authTab || "login"));
-    });
-    setMode(window.location.pathname === "/register" ? "register" : "login");
-
-    if (!form) return;
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      if (!submit || !message || !modeInput) return;
-      message.textContent = "";
-      submit.disabled = true;
-      const originalText = submit.textContent;
-      submit.textContent = "Проверяем...";
-
-      const formData = new FormData(form);
-      const mode = modeInput.value === "register" ? "register" : "login";
-      const payload = {
-        email: String(formData.get("email") || "").trim(),
-        password: String(formData.get("password") || ""),
-      };
-      if (mode === "register") payload.full_name = String(formData.get("full_name") || "").trim() || null;
-
-      try {
-        const response = await fetch(apiBase + "/auth/" + mode, {
-          method: "POST",
-          headers: { "Accept": "application/json", "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        const raw = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(humanize(raw.detail));
-        window.localStorage.setItem(TOKEN_KEY, raw.access_token);
-        window.location.replace("/dashboard");
-      } catch (error) {
-        message.textContent = error instanceof Error ? humanize(error.message) : "Не удалось выполнить запрос.";
-        submit.disabled = false;
-        submit.textContent = originalText;
-      }
-    });
-  });
-})();
-`;
+function toTask(job: ParserJob): HomeTask {
+  const value = percent(job.progress_current, job.progress_total);
+  return {
+    id: job.id,
+    source: job.source.toUpperCase(),
+    status: job.status === "completed" ? "Готово" : job.status === "running" ? "В работе" : job.status,
+    progress: value,
+    count: `${job.progress_current}/${job.progress_total || "?"}`,
+    date: formatDate(job.created_at),
+  };
+}
 
 export default function HomePage() {
+  const [jobs, setJobs] = useState<ParserJob[]>([]);
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
+
+  useEffect(() => {
+    if (!getToken()) return;
+    Promise.all([api.jobs(false), api.usage().catch(() => null)])
+      .then(([jobsResponse, usageResponse]) => {
+        setJobs(jobsResponse.items);
+        setUsage(usageResponse);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const tasks = useMemo(() => (jobs.length ? jobs.slice(0, 6).map(toTask) : fallbackTasks), [jobs]);
+  const activeJobs = jobs.filter((job) => ["pending", "running"].includes(job.status)).length;
+  const completed = jobs.length ? jobs.filter((job) => job.status === "completed").length : 2;
+  const recordsUsed = usage?.records_used ?? 110;
+  const recordsLimit = usage?.subscription.plan.max_records_per_month ?? 500;
+  const recordsPercent = percent(recordsUsed, recordsLimit);
+  const planName = usage?.subscription.plan.name || "Free";
+  const jobsRemaining = usage?.jobs_remaining ?? 8;
+
   return (
-    <main className="auth-page">
-      <nav className="auth-public-nav" aria-label="Публичная навигация">
-        <Link className="auth-brand-link" href="/">
-          <span><img src="/logo/logo.png" alt="" /></span>
-          <strong>ParseHub</strong>
-        </Link>
+    <div className="parsehub-shell parsehub-public-shell">
+      <header className="parsehub-header">
+        <div className="parsehub-header-inner">
+          <Link className="parsehub-brand" href="/">
+            <span className="parsehub-logo-wrap"><img src="/logo/logo.png" alt="" /></span>
+            <strong>ParseHub</strong>
+          </Link>
+          <nav className="parsehub-nav" aria-label="Публичная навигация">
+            <Link href="/">Обзор</Link>
+            <Link href="/marketing">Парсеры</Link>
+            <Link href="/structure">Результаты</Link>
+            <Link href="/finance">Тарифы</Link>
+            <Link href="/profile">Кабинет</Link>
+          </nav>
+          <div className="parsehub-userbar">
+            <Link className="parsehub-login-link" href="/login">Вход</Link>
+            <Link className="parsehub-register-link" href="/register">Регистрация</Link>
+          </div>
+        </div>
+      </header>
+
+      <main className="parsehub-main">
+        <section className="dashboard-grid">
+          <article className="metric-card metric-neutral">
+            <span>Активные задачи</span>
+            <strong>{activeJobs}</strong>
+            <small>очередь и выполнение</small>
+          </article>
+          <article className="metric-card metric-neutral">
+            <span>Успешные запуски</span>
+            <strong>{completed}</strong>
+            <small>последние задачи</small>
+          </article>
+          <article className="metric-card metric-neutral">
+            <span>Тариф</span>
+            <strong className="parsehub-plan-name">{planName}</strong>
+            <small>{jobsRemaining} запусков осталось</small>
+          </article>
+          <article className="usage-card">
+            <div className="progress-ring" style={{ "--progress": `${recordsPercent * 3.6}deg` } as CSSProperties}>
+              <div>
+                <strong>{recordsPercent}%</strong>
+                <span>records</span>
+              </div>
+            </div>
+            <div>
+              <span className="eyebrow">Лимит записей</span>
+              <strong>{recordsUsed} / {recordsLimit}</strong>
+              <p>Месячное использование по текущему тарифу.</p>
+            </div>
+          </article>
+        </section>
+
+        <section className="panel-card parsehub-home-table">
+          <div className="section-heading">
+            <span className="eyebrow">Последняя активность</span>
+            <h2>Последние задачи</h2>
+          </div>
+          <div className="table-card">
+            <div className="data-table home-table">
+              <div className="table-row table-head">
+                <span>Источник</span>
+                <span>Статус</span>
+                <span>Прогресс</span>
+                <span>Запуск</span>
+              </div>
+              {tasks.map((task) => (
+                <div className="table-row" key={task.id}>
+                  <span className="source-cell">{task.source}</span>
+                  <span><span className="status-pill status-completed">{task.status}</span></span>
+                  <span>
+                    <div className="inline-progress"><i style={{ width: `${task.progress}%` }} /></div>
+                    <small>{task.count}</small>
+                  </span>
+                  <span>{task.date}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer className="parsehub-footer">
         <div>
+          <h3>Документы и информация</h3>
           <Link href="/about">О нас</Link>
-          <Link href="/guide">Инструкция</Link>
-          <Link href="/finance">Тарифы</Link>
+          <Link href="/privacy">Политика конфиденциальности</Link>
+          <Link href="/offer">Оферта</Link>
           <Link href="/payment">Оплата</Link>
-        </div>
-      </nav>
-
-      <section className="hero-panel">
-        <div className="hero-stage" aria-hidden="true">
-          <div className="hero-glow hero-glow-a" />
-          <div className="hero-glow hero-glow-b" />
-          <div className="hero-grid" />
-          <div className="hero-card hero-card-a">
-            <span className="hero-card-label">Очередь</span>
-            <strong>Live-задачи</strong>
-          </div>
-          <div className="hero-card hero-card-b">
-            <span className="hero-card-label">База</span>
-            <strong>PostgreSQL</strong>
-          </div>
-          <div className="hero-card hero-card-c">
-            <span className="hero-card-label">Выгрузка</span>
-            <strong>CSV / XLSX</strong>
-          </div>
-        </div>
-      </section>
-
-      <section className="auth-card">
-        <div className="auth-tabs">
-          <button className="active" type="button" data-auth-tab="login">Вход</button>
-          <button type="button" data-auth-tab="register">Регистрация</button>
+          <Link href="/guide">Инструкция</Link>
         </div>
         <div>
-          <span className="eyebrow">Безопасный доступ</span>
-          <h2 data-auth-title>Войти в кабинет</h2>
-          <p className="auth-helper" data-auth-helper>Введите email и пароль, чтобы продолжить работу с задачами.</p>
+          <h3>Социальные сети</h3>
+          <div className="parsehub-socials">
+            <a href="#" aria-label="YouTube">YT</a>
+            <a href="#" aria-label="Instagram">IG</a>
+            <a href="#" aria-label="Telegram">TG</a>
+            <a href="#" aria-label="WhatsApp">WA</a>
+          </div>
         </div>
-        <form data-auth-form>
-          <input type="hidden" name="mode" value="login" data-auth-mode />
-          <label className="field-block" data-name-field hidden>
-            <span>Имя</span>
-            <input name="full_name" placeholder="Ваше имя" autoComplete="name" />
-          </label>
-          <label className="field-block">
-            <span>Email</span>
-            <input name="email" type="email" placeholder="name@company.kz" autoComplete="email" required />
-          </label>
-          <label className="field-block">
-            <span>Пароль</span>
-            <input name="password" type="password" minLength={8} autoComplete="current-password" required />
-          </label>
-          <button className="primary-button wide" type="submit" data-auth-submit>Войти</button>
-          <p className="form-message error" data-auth-message aria-live="polite" />
-        </form>
-        <p className="auth-note">Первый зарегистрированный пользователь автоматически получает роль администратора.</p>
-      </section>
-      <script dangerouslySetInnerHTML={{ __html: authScript }} />
-    </main>
+        <div>
+          <h3>Служба поддержки ParseHub</h3>
+          <p>Поддержка по задачам, выгрузкам, тарифам и настройкам доступа.</p>
+        </div>
+      </footer>
+    </div>
   );
 }
