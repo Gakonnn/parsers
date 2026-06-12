@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { api, getToken } from "@/lib/api";
+import { api, clearToken, getToken } from "@/lib/api";
 import { formatDate, percent } from "@/lib/format";
 import type { ParserJob, UsageSummary } from "@/lib/types";
 
@@ -16,10 +16,7 @@ type HomeTask = {
   date: string;
 };
 
-const fallbackTasks: HomeTask[] = [
-  { id: "demo-1", source: "2GIS", status: "Готово", progress: 100, count: "10/10", date: "08 июн., 12:38" },
-  { id: "demo-2", source: "2GIS", status: "Готово", progress: 100, count: "100/100", date: "07 июн., 17:57" },
-];
+type AuthState = "checking" | "guest" | "user";
 
 function toTask(job: ParserJob): HomeTask {
   const value = percent(job.progress_current, job.progress_total);
@@ -34,27 +31,35 @@ function toTask(job: ParserJob): HomeTask {
 }
 
 export default function HomePage() {
+  const [authState, setAuthState] = useState<AuthState>("checking");
   const [jobs, setJobs] = useState<ParserJob[]>([]);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
 
   useEffect(() => {
-    if (!getToken()) return;
+    if (!getToken()) {
+      setAuthState("guest");
+      return;
+    }
+    setAuthState("user");
     Promise.all([api.jobs(false), api.usage().catch(() => null)])
       .then(([jobsResponse, usageResponse]) => {
         setJobs(jobsResponse.items);
         setUsage(usageResponse);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        clearToken();
+        setAuthState("guest");
+      });
   }, []);
 
-  const tasks = useMemo(() => (jobs.length ? jobs.slice(0, 6).map(toTask) : fallbackTasks), [jobs]);
+  const tasks = useMemo(() => jobs.slice(0, 6).map(toTask), [jobs]);
   const activeJobs = jobs.filter((job) => ["pending", "running"].includes(job.status)).length;
-  const completed = jobs.length ? jobs.filter((job) => job.status === "completed").length : 2;
-  const recordsUsed = usage?.records_used ?? 110;
-  const recordsLimit = usage?.subscription.plan.max_records_per_month ?? 500;
+  const completed = jobs.filter((job) => job.status === "completed").length;
+  const recordsUsed = usage?.records_used ?? 0;
+  const recordsLimit = usage?.subscription.plan.max_records_per_month ?? 0;
   const recordsPercent = percent(recordsUsed, recordsLimit);
-  const planName = usage?.subscription.plan.name || "Free";
-  const jobsRemaining = usage?.jobs_remaining ?? 8;
+  const planName = usage?.subscription.plan.name || "Тариф";
+  const jobsRemaining = usage?.jobs_remaining ?? 0;
 
   return (
     <div className="parsehub-shell parsehub-public-shell">
@@ -79,64 +84,108 @@ export default function HomePage() {
       </header>
 
       <main className="parsehub-main">
-        <section className="dashboard-grid">
-          <article className="metric-card metric-neutral">
-            <span>Активные задачи</span>
-            <strong>{activeJobs}</strong>
-            <small>очередь и выполнение</small>
-          </article>
-          <article className="metric-card metric-neutral">
-            <span>Успешные запуски</span>
-            <strong>{completed}</strong>
-            <small>последние задачи</small>
-          </article>
-          <article className="metric-card metric-neutral">
-            <span>Тариф</span>
-            <strong className="parsehub-plan-name">{planName}</strong>
-            <small>{jobsRemaining} запусков осталось</small>
-          </article>
-          <article className="usage-card">
-            <div className="progress-ring" style={{ "--progress": `${recordsPercent * 3.6}deg` } as CSSProperties}>
-              <div>
-                <strong>{recordsPercent}%</strong>
-                <span>records</span>
-              </div>
-            </div>
-            <div>
-              <span className="eyebrow">Лимит записей</span>
-              <strong>{recordsUsed} / {recordsLimit}</strong>
-              <p>Месячное использование по текущему тарифу.</p>
-            </div>
-          </article>
-        </section>
-
-        <section className="panel-card parsehub-home-table">
-          <div className="section-heading">
-            <span className="eyebrow">Последняя активность</span>
-            <h2>Последние задачи</h2>
-          </div>
-          <div className="table-card">
-            <div className="data-table home-table">
-              <div className="table-row table-head">
-                <span>Источник</span>
-                <span>Статус</span>
-                <span>Прогресс</span>
-                <span>Запуск</span>
-              </div>
-              {tasks.map((task) => (
-                <div className="table-row" key={task.id}>
-                  <span className="source-cell">{task.source}</span>
-                  <span><span className="status-pill status-completed">{task.status}</span></span>
-                  <span>
-                    <div className="inline-progress"><i style={{ width: `${task.progress}%` }} /></div>
-                    <small>{task.count}</small>
-                  </span>
-                  <span>{task.date}</span>
+        {authState === "user" ? (
+          <>
+            <section className="dashboard-grid">
+              <article className="metric-card metric-neutral">
+                <span>Активные задачи</span>
+                <strong>{activeJobs}</strong>
+                <small>очередь и выполнение</small>
+              </article>
+              <article className="metric-card metric-neutral">
+                <span>Успешные запуски</span>
+                <strong>{completed}</strong>
+                <small>последние задачи</small>
+              </article>
+              <article className="metric-card metric-neutral">
+                <span>Тариф</span>
+                <strong className="parsehub-plan-name">{planName}</strong>
+                <small>{jobsRemaining} запусков осталось</small>
+              </article>
+              <article className="usage-card">
+                <div className="progress-ring" style={{ "--progress": `${recordsPercent * 3.6}deg` } as CSSProperties}>
+                  <div>
+                    <strong>{recordsPercent}%</strong>
+                    <span>records</span>
+                  </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        </section>
+                <div>
+                  <span className="eyebrow">Лимит записей</span>
+                  <strong>{recordsUsed} / {recordsLimit}</strong>
+                  <p>Месячное использование по текущему тарифу.</p>
+                </div>
+              </article>
+            </section>
+
+            <section className="panel-card parsehub-home-table">
+              <div className="section-heading">
+                <span className="eyebrow">Последняя активность</span>
+                <h2>Последние задачи</h2>
+              </div>
+              <div className="table-card">
+                <div className="data-table home-table">
+                  <div className="table-row table-head">
+                    <span>Источник</span>
+                    <span>Статус</span>
+                    <span>Прогресс</span>
+                    <span>Запуск</span>
+                  </div>
+                  {tasks.length ? (
+                    tasks.map((task) => (
+                      <div className="table-row" key={task.id}>
+                        <span className="source-cell">{task.source}</span>
+                        <span><span className="status-pill status-completed">{task.status}</span></span>
+                        <span>
+                          <div className="inline-progress"><i style={{ width: `${task.progress}%` }} /></div>
+                          <small>{task.count}</small>
+                        </span>
+                        <span>{task.date}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="table-row parsehub-empty-row">
+                      <span>Пока нет запусков</span>
+                      <span>После первого парсинга здесь появится история задач.</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+          </>
+        ) : (
+          <>
+            <section className="panel-card parsehub-guest-hero">
+              <span className="eyebrow">ParseHub Platform</span>
+              <h1>Парсеры запускаются только из личного кабинета</h1>
+              <p>
+                Персональные задачи, лимиты, результаты и выгрузки доступны после входа.
+                На публичной странице мы показываем только возможности платформы, без чужих или демо-данных.
+              </p>
+              <div className="parsehub-guest-actions">
+                <Link className="parsehub-register-link" href="/register">Создать аккаунт</Link>
+                <Link className="parsehub-login-link" href="/login">Войти в кабинет</Link>
+              </div>
+            </section>
+
+            <section className="parsehub-guest-grid">
+              <article className="metric-card metric-neutral">
+                <span>Источники</span>
+                <strong>2GIS</strong>
+                <small>Krisha.kz, OLX и другие парсеры подключаются из кабинета.</small>
+              </article>
+              <article className="metric-card metric-neutral">
+                <span>Результаты</span>
+                <strong>CSV</strong>
+                <small>Выгрузка в CSV и Excel доступна после авторизации.</small>
+              </article>
+              <article className="metric-card metric-neutral">
+                <span>Хранение</span>
+                <strong>DB</strong>
+                <small>Данные сохраняются в PostgreSQL и привязаны к пользователю.</small>
+              </article>
+            </section>
+          </>
+        )}
       </main>
 
       <footer className="parsehub-footer">
