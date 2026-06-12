@@ -32,11 +32,10 @@ from app.services.payments import (
     process_kaspi_webhook,
     process_payment_webhook,
     sync_kaspi_invoice_status,
-    verify_kaspi_webhook_signature,
     verify_webhook_signature,
     webhook_payload_from_raw,
 )
-from app.services.kaspi_pos import KASPI_QR_PROVIDER, kaspi_pos_configured
+from app.services.kaspi_pos import KASPI_QR_PROVIDER, kaspi_pos_configured, verify_kaspi_webhook_signature
 from app.services.audit import log_event, notify_user
 from app.services.quota import current_month_start, get_monthly_usage, get_or_create_active_subscription
 
