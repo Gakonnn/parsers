@@ -28,45 +28,6 @@ def _hub_module() -> Any:
     return module
 
 
-def _minimal_olx_categories() -> dict[str, Any]:
-    categories = [
-        ("transport", "Транспорт", [("legkovye-avtomobili", "Легковые автомобили")]),
-        ("nedvizhimost", "Недвижимость", [("prodazha-kvartir", "Продажа квартир"), ("arenda-kvartir", "Аренда квартир")]),
-        ("elektronika", "Электроника", [("telefony-i-aksesuary", "Телефоны и аксессуары"), ("kompyutery-i-komplektuyuschie", "Компьютеры")]),
-        ("dom-i-sad", "Дом и сад", [("mebel", "Мебель"), ("bytovaya-tehnika", "Бытовая техника")]),
-        ("rabota", "Работа", [("vakansii", "Вакансии")]),
-        ("uslugi", "Услуги", [("stroitelstvo-remont", "Строительство и ремонт")]),
-    ]
-    level1 = []
-    for slug, name, children in categories:
-        level1.append(
-            {
-                "slug": slug,
-                "name": name,
-                "url": f"https://www.olx.kz/{slug}/",
-                "level2": [
-                    {
-                        "slug": child_slug,
-                        "name": child_name,
-                        "url": f"https://www.olx.kz/{slug}/{child_slug}/",
-                        "level3": [],
-                    }
-                    for child_slug, child_name in children
-                ],
-            }
-        )
-    return {
-        "source_url": "local-fallback",
-        "updated_at": "",
-        "level1": level1,
-        "stats": {
-            "level1_count": len(level1),
-            "level2_count": sum(len(item["level2"]) for item in level1),
-            "level3_count": 0,
-        },
-    }
-
-
 def get_fallback_meta(path: str) -> dict[str, Any]:
     module = _hub_module()
     if path == "/api/2gis/rubrics":
@@ -76,8 +37,8 @@ def get_fallback_meta(path: str) -> dict[str, Any]:
     if path == "/api/olx/categories":
         try:
             return module.get_olx_categories_tree()
-        except Exception:
-            return _minimal_olx_categories()
+        except Exception as exc:
+            raise ParserMetaFallbackError(f"Could not load live OLX categories: {exc}") from exc
     if path == "/api/config":
         return {"parsers": module.parser_definitions()}
     raise ParserMetaFallbackError(f"No fallback metadata handler for {path}")

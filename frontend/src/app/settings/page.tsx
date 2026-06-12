@@ -105,7 +105,7 @@ export default function SettingsPage() {
           <StatusPill status={usage?.subscription.status || "active"} />
           <div>
             <span>Тариф</span>
-            <strong>{currentPlan?.name || "Free"}</strong>
+            <strong>{currentPlan?.name || "—"}</strong>
           </div>
           <div>
             <span>Запуски / записи</span>
@@ -177,7 +177,7 @@ export default function SettingsPage() {
               <span className="eyebrow">Оплата</span>
               <h2>Платежная интеграция</h2>
             </div>
-            <StatusPill status={provider?.checkout_mode || "mock"} />
+            <StatusPill status={provider?.checkout_mode || "manual"} />
           </div>
           {provider ? (
             <div className="provider-grid">

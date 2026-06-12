@@ -27,8 +27,12 @@ export default function BillingPage() {
   async function createInvoice(planCode: string) {
     setMessage("");
     try {
-      await api.createInvoice(planCode);
-      setMessage("Счет создан. На следующем этапе подключим реальную платежную страницу.");
+      const invoice = await api.createInvoice(planCode);
+      setMessage(
+        invoice.payment_url
+          ? "Счет создан. Перейдите по ссылке оплаты из истории счетов."
+          : "Счет создан. Оплата будет обработана через подключенного провайдера или администратором.",
+      );
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Не удалось создать счет");
@@ -40,7 +44,7 @@ export default function BillingPage() {
       <section className="billing-hero">
         <div>
           <span className="eyebrow">Текущий тариф</span>
-          <h2>{usage?.subscription.plan.name || "Free"}</h2>
+          <h2>{usage?.subscription.plan.name || "—"}</h2>
           <p>{usage?.jobs_used ?? 0} запусков и {usage?.records_used ?? 0} записей использовано в этом месяце.</p>
         </div>
         <StatusPill status={usage?.subscription.status || "active"} />

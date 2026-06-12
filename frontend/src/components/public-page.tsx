@@ -37,7 +37,7 @@ export function PublicPage({
             </Link>
           ))}
         </div>
-        <Link className="public-login-link" href="/">
+        <Link className="public-login-link" href="/login">
           Войти
         </Link>
       </nav>

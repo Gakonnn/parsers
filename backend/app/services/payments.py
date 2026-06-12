@@ -51,7 +51,8 @@ def create_invoice_for_plan(db: Session, *, user: User, plan: SubscriptionPlan, 
     )
     db.add(invoice)
     db.flush()
-    # Provider integration will replace this URL with a real checkout link.
+    # Provider integration can replace this URL with a real checkout link.
+    # Without a configured provider we keep it empty instead of exposing a non-production payment URL.
     invoice.provider_invoice_id = str(invoice.id)
     invoice.payment_url = _build_checkout_url(invoice, plan)
     db.flush()
@@ -72,7 +73,7 @@ def _build_checkout_url(invoice: Invoice, plan: SubscriptionPlan) -> str:
             )
         except Exception:
             pass
-    return f"/api/v1/billing/invoices/{invoice.id}/mock-pay"
+    return ""
 
 
 def activate_subscription_from_invoice(db: Session, invoice: Invoice) -> UserSubscription:

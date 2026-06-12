@@ -1,39 +1,72 @@
-import Link from "next/link";
-import { PublicPage } from "@/components/public-page";
+"use client";
 
-const plans = [
-  { name: "Бесплатный", price: "0 ₸", runs: "3 запуска", records: "50 записей", note: "Для тестирования кабинета" },
-  { name: "Старт", price: "4 000 ₸", runs: "10 запусков", records: "500 записей", note: "Для небольших регулярных задач" },
-  { name: "Мини-бизнес", price: "10 000 ₸", runs: "25 запусков", records: "2 000 записей", note: "Для активного сбора данных" },
-  { name: "Бизнес", price: "25 000 ₸", runs: "70 запусков", records: "10 000 записей", note: "Для отдела продаж или аналитики" },
-  { name: "Профи", price: "50 000 ₸", runs: "180 запусков", records: "35 000 записей", note: "Для высокой нагрузки" },
-  { name: "Enterprise", price: "100 000 ₸", runs: "500 запусков", records: "100 000 записей", note: "Для команд и кастомных условий" },
-];
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { PublicPage } from "@/components/public-page";
+import { api } from "@/lib/api";
+import { formatMoney } from "@/lib/format";
+import type { SubscriptionPlan } from "@/lib/types";
+
+function limitText(value: number, unit: string): string {
+  return value === -1 ? `Безлимит ${unit}` : `${value} ${unit}`;
+}
 
 export default function FinancePage() {
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api
+      .plans()
+      .then(setPlans)
+      .catch((err) => setError(err instanceof Error ? err.message : "Не удалось загрузить тарифы"))
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
     <PublicPage
       eyebrow="Тарифы"
       title="Планы под разные объемы данных"
-      description="Тарифы можно ограничивать по количеству запусков, записей, доступным источникам и сроку действия подписки."
+      description="Тарифы публикуются из панели администратора и всегда загружаются из базы данных."
     >
-      <section className="public-pricing-grid">
-        {plans.map((plan) => (
-          <article className="public-plan-card" key={plan.name}>
-            <span className="soft-badge">{plan.name}</span>
-            <strong>{plan.price}</strong>
-            <p>{plan.note}</p>
-            <ul>
-              <li>{plan.runs}</li>
-              <li>{plan.records}</li>
-              <li>CSV и Excel экспорт</li>
-            </ul>
-            <Link className="primary-button wide" href="/">
-              Выбрать тариф
-            </Link>
-          </article>
-        ))}
-      </section>
+      {loading ? (
+        <section className="public-section">
+          <h2>Загружаем тарифы</h2>
+          <p>Получаем актуальные планы из базы данных.</p>
+        </section>
+      ) : error ? (
+        <section className="public-section">
+          <h2>Тарифы временно недоступны</h2>
+          <p>{error}</p>
+        </section>
+      ) : plans.length ? (
+        <section className="public-pricing-grid">
+          {plans.map((plan) => (
+            <article className="public-plan-card" key={plan.id}>
+              <span className="soft-badge">{plan.code}</span>
+              <strong>{formatMoney(plan.price_kzt, plan.currency)}</strong>
+              <p>{plan.description || plan.name}</p>
+              <ul>
+                <li>{limitText(plan.max_jobs_per_month, "запусков / месяц")}</li>
+                <li>{limitText(plan.max_records_per_month, "записей / месяц")}</li>
+                <li>{plan.allowed_sources.length ? plan.allowed_sources.join(", ") : "Все источники"}</li>
+              </ul>
+              <Link className="primary-button wide" href="/register">
+                Подключить тариф
+              </Link>
+            </article>
+          ))}
+        </section>
+      ) : (
+        <section className="public-section">
+          <h2>Тарифы ещё не опубликованы</h2>
+          <p>Администратор может добавить тарифы в панели управления. После публикации они появятся здесь автоматически.</p>
+          <Link className="primary-button" href="/register">
+            Создать аккаунт
+          </Link>
+        </section>
+      )}
     </PublicPage>
   );
 }

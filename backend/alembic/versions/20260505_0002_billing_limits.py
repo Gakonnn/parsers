@@ -101,8 +101,8 @@ def upgrade() -> None:
             {
                 "id": uuid.UUID(FREE_PLAN_ID),
                 "code": "free",
-                "name": "Free",
-                "description": "Default free plan for new users",
+                "name": "Базовый",
+                "description": "Базовый тариф для новых пользователей",
                 "price_kzt": 0,
                 "currency": "KZT",
                 "billing_period": "monthly",

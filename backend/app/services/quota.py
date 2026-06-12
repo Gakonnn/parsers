@@ -70,8 +70,8 @@ def get_or_create_free_plan(db: Session) -> SubscriptionPlan:
 
     plan = SubscriptionPlan(
         code=FREE_PLAN_CODE,
-        name="Free",
-        description="Default free plan for new users",
+        name="Базовый",
+        description="Базовый тариф для новых пользователей",
         price_kzt=0,
         max_jobs_per_month=settings.free_plan_jobs_per_month,
         max_records_per_month=settings.free_plan_records_per_month,

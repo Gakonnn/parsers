@@ -144,41 +144,6 @@ def get_my_invoice(invoice_id: UUID, db: Session = Depends(get_db), current_user
     return invoice
 
 
-@router.post("/invoices/{invoice_id}/mock-pay", response_model=PaymentPublic)
-def mock_pay_invoice(
-    invoice_id: UUID,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> Payment:
-    invoice = db.scalar(select(Invoice).where(Invoice.id == invoice_id, Invoice.user_id == current_user.id))
-    if invoice is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found")
-    payment = mark_invoice_paid(db, invoice, provider_payment_id=f"mock_{invoice.id}", raw_payload={"mock": True})
-    log_event(
-        db,
-        event_type="invoice.paid",
-        actor_user=current_user,
-        target_user=current_user,
-        entity_type="invoice",
-        entity_id=invoice.id,
-        message="Invoice paid with mock provider",
-        payload={"payment_id": str(payment.id), "provider": payment.provider},
-        request=request,
-    )
-    notify_user(
-        db,
-        user=current_user,
-        type="payment.succeeded",
-        title="Оплата прошла успешно",
-        body="Тариф активирован.",
-        payload={"invoice_id": str(invoice.id), "payment_id": str(payment.id)},
-    )
-    db.commit()
-    db.refresh(payment)
-    return payment
-
-
 @router.post("/webhook", response_model=PaymentPublic)
 async def payment_webhook(
     request: Request,

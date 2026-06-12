@@ -92,6 +92,6 @@ def get_settings() -> Settings:
         payment_success_url=_getenv("PAYMENT_SUCCESS_URL", default=""),
         payment_cancel_url=_getenv("PAYMENT_CANCEL_URL", default=""),
         payment_provider_name=_getenv("PAYMENT_PROVIDER_NAME", default="manual"),
-        payment_checkout_mode=_getenv("PAYMENT_CHECKOUT_MODE", default="mock"),
+        payment_checkout_mode=_getenv("PAYMENT_CHECKOUT_MODE", default="manual"),
         payment_checkout_url_template=_getenv("PAYMENT_CHECKOUT_URL_TEMPLATE", default=""),
     )

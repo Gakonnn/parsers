@@ -47,7 +47,6 @@ http://127.0.0.1:8000/docs
 - `POST /api/v1/billing/invoices`
 - `GET /api/v1/billing/invoices`
 - `GET /api/v1/billing/invoices/{invoice_id}`
-- `POST /api/v1/billing/invoices/{invoice_id}/mock-pay`
 - `POST /api/v1/billing/webhook`
 - `POST /api/v1/billing/admin/plans`
 - `GET /api/v1/billing/admin/plans`
@@ -95,11 +94,12 @@ If a user does not have an active subscription, the backend automatically attach
 
 ## Payments
 
-The payment layer is provider-agnostic for now:
+The payment layer is provider-agnostic:
 
 - `POST /api/v1/billing/invoices` creates an invoice for a selected plan
-- `POST /api/v1/billing/invoices/{invoice_id}/mock-pay` marks the invoice paid for local testing
+- `PAYMENT_CHECKOUT_URL_TEMPLATE` can point users to a real provider checkout page
 - `POST /api/v1/billing/webhook` accepts signed provider callbacks
+- admins can manually mark invoices as paid from protected admin endpoints
 
 Webhook signature header:
 

@@ -35,7 +35,7 @@ export default function DashboardPage() {
       <section className="dashboard-grid">
         <MetricCard label="Активные задачи" value={activeJobs} note="очередь и выполнение" tone={activeJobs ? "warn" : "neutral"} />
         <MetricCard label="Успешные запуски" value={completed} note="последние задачи" tone="good" />
-        <MetricCard label="Тариф" value={usage?.subscription.plan.name || "Free"} note={`${usage?.jobs_remaining ?? 0} запусков осталось`} />
+        <MetricCard label="Тариф" value={usage?.subscription.plan.name || "—"} note={`${usage?.jobs_remaining ?? 0} запусков осталось`} />
         <div className="usage-card">
           <ProgressRing value={recordsPercent} label="records" />
           <div>
