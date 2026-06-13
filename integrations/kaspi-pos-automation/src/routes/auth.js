@@ -104,8 +104,94 @@ router.post('/send-phone', async (req, res) => {
 
     const body = await resp.json();
     const smsSent = body.view?.code === 'EnterOtp';
+    session.lastView = body.view?.code || null;
+    session.lastStepName = body.meta?.sn || null;
 
-    res.json({ success: smsSent, processId: session.processId, desc: body.data?.desc, view: body.view?.code, body });
+    res.json({
+      success: smsSent,
+      processId: session.processId,
+      desc: body.data?.desc,
+      view: body.view?.code,
+      step: body.view?.code === 'KPEnterLoginPassword' ? 'password_required' : smsSent ? 'otp_required' : 'phone_response',
+      body,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════
+//  Optional step — Submit password when Kaspi asks KPEnterLoginPassword
+// ═══════════════════════════════════════════════════
+
+router.post('/submit-password', async (req, res) => {
+  const { password, processId } = req.body;
+  if (!password) return res.status(400).json({ error: 'password required' });
+  if (!processId) return res.status(400).json({ error: 'processId required' });
+
+  const session = authSessions.get(processId);
+  if (!session) return res.status(400).json({ error: 'Unknown processId' });
+
+  try {
+    const resp = await loggedFetch(`${KASPI_ENTRANCE_URL}/api/v1/entrance/step`, {
+      method: 'POST',
+      headers: {
+        ...ENTRANCE_HEADERS_BASE,
+        Referer: `${KASPI_ENTRANCE_URL}/process/enter-login-password?pId=${session.processId}&firstPage=KPEnterLoginPassword`,
+        Cookie: entranceCookie(session.userToken),
+      },
+      body: JSON.stringify({
+        meta: { pId: session.processId, sn: session.lastStepName || 'ViewEnterLoginPassword' },
+        data: {
+          phoneNumber: session.phoneNumber,
+          login: session.phoneNumber,
+          password,
+        },
+        actType: 'Success',
+      }),
+    });
+
+    const ut = extractUserToken(resp);
+    if (ut) session.userToken = ut;
+
+    const body = await resp.json();
+    const viewCode = body.view?.code;
+    session.lastView = viewCode || null;
+    session.lastStepName = body.meta?.sn || null;
+
+    if (viewCode === 'EnterOtp' || viewCode === 'KPEnterOtp') {
+      res.json({
+        success: false,
+        processId: session.processId,
+        step: 'otp_required',
+        desc: body.data?.desc,
+        view: viewCode,
+        body,
+      });
+      return;
+    }
+
+    if (body.data?.type === 'kpDeviceRegistration' || viewCode === 'KPMobileCall') {
+      const finishResult = await doFinish(session);
+      authSessions.delete(processId);
+      res.json({
+        success: true,
+        processId: session.processId,
+        step: 'finished',
+        message: 'Password accepted and finish completed',
+        passwordBody: body,
+        ...finishResult,
+      });
+      return;
+    }
+
+    res.json({
+      success: false,
+      processId: session.processId,
+      step: viewCode === 'KPEnterLoginPassword' ? 'password_required' : 'password_response',
+      view: viewCode,
+      body,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

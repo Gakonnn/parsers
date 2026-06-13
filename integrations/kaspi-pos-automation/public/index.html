@@ -301,6 +301,18 @@
             <button class="btn btn-primary" id="btnSendPhone" onclick="sendPhone()">Получить SMS код</button>
           </div>
 
+          <!-- Optional Step: Password -->
+          <div id="authStepPassword" class="hidden">
+            <h2>Введите пароль Kaspi Pay</h2>
+            <p id="passwordDesc" style="font-size: 14px; color: #666; margin-bottom: 12px">
+              Kaspi запросил пароль для этого аккаунта.
+            </p>
+            <label>Пароль</label>
+            <input type="password" id="passwordInput" placeholder="Пароль от аккаунта кассира" autocomplete="current-password" />
+            <button class="btn btn-primary" id="btnSubmitPassword" onclick="submitPassword()">Продолжить</button>
+            <button class="btn btn-secondary" onclick="resetAuth()">Назад</button>
+          </div>
+
           <!-- Step 2: OTP -->
           <div id="authStep2" class="hidden">
             <h2>Введите код из SMS</h2>

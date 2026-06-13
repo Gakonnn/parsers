@@ -125,9 +125,18 @@ window.addEventListener('DOMContentLoaded', () => {
 // ─── Auth UI Helpers ───
 
 const setAuthStep = (n) => {
+  const panelByStep = {
+    1: 'authStep1',
+    password: 'authStepPassword',
+    2: 'authStep2',
+    3: 'authStep3',
+  };
+  Object.values(panelByStep).forEach((id) => $(id)?.classList.add('hidden'));
+  $(panelByStep[n])?.classList.remove('hidden');
+
+  const dotStep = n === 'password' ? 2 : Number(n);
   for (let i = 1; i <= 3; i++) {
-    $(`authStep${i}`).classList.toggle('hidden', i !== n);
-    $(`dot${i}`).className = `step-dot${i < n ? ' done' : i === n ? ' active' : ''}`;
+    $(`dot${i}`).className = `step-dot${i < dotStep ? ' done' : i === dotStep ? ' active' : ''}`;
   }
 };
 
@@ -145,6 +154,7 @@ const showAuthMsg = (msg, type) => {
 const resetAuth = () => {
   setAuthStep(1);
   $('otpInput').value = '';
+  $('passwordInput').value = '';
   showAuthMsg('', '');
 };
 
@@ -174,14 +184,60 @@ const sendPhone = async () => {
     if (resp.success) {
       $('otpDesc').textContent = resp.desc || `SMS отправлен на +7${phone}`;
       setAuthStep(2);
+    } else if (resp.step === 'password_required' || resp.view === 'KPEnterLoginPassword') {
+      $('passwordDesc').textContent = `Kaspi запросил пароль для номера +7${formatPhone(phone)}. Введите пароль аккаунта кассира Kaspi Pay.`;
+      $('passwordInput').value = '';
+      setAuthStep('password');
     } else {
-      showAuthMsg(`Ошибка: ${resp.body?.data?.desc || JSON.stringify(resp.body)}`, 'err');
+      const clientType = resp.body?.data?.analyticObj?.clientType;
+      const hint =
+        clientType === 'customer'
+          ? 'Этот номер Kaspi определил как клиентский аккаунт. Для QR-оплаты нужен аккаунт кассира Kaspi Pay.'
+          : '';
+      showAuthMsg(`Ошибка: ${resp.body?.data?.desc || hint || JSON.stringify(resp.body)}`, 'err');
     }
   } catch (e) {
     showAuthMsg(`Ошибка сети: ${e.message}`, 'err');
   } finally {
     btn.disabled = false;
     btn.textContent = 'Получить SMS код';
+  }
+};
+
+const submitPassword = async () => {
+  const password = $('passwordInput').value.trim();
+  if (!password) return showAuthMsg('Введите пароль', 'err');
+
+  const btn = $('btnSubmitPassword');
+  btn.disabled = true;
+  btn.innerHTML = 'Проверка...<span class="loader"></span>';
+  showAuthMsg('', '');
+
+  try {
+    const resp = await apiPost('/api/auth/submit-password', { password, processId: authProcessId });
+    if (resp.success && resp.step === 'finished') {
+      saveSession(resp);
+      authProcessId = null;
+      $('passwordInput').value = '';
+      showMainScreen(resp);
+    } else if (resp.step === 'otp_required') {
+      $('otpDesc').textContent = resp.desc || 'Kaspi отправил SMS-код для подтверждения входа';
+      setAuthStep(2);
+    } else if (resp.step === 'password_required') {
+      showAuthMsg('Kaspi не принял пароль. Проверьте пароль аккаунта кассира Kaspi Pay.', 'err');
+    } else {
+      const clientType = resp.body?.data?.analyticObj?.clientType;
+      const hint =
+        clientType === 'customer'
+          ? 'Kaspi всё еще видит этот номер как клиентский аккаунт. Нужен аккаунт кассира Kaspi Pay.'
+          : '';
+      showAuthMsg(`Ошибка входа: ${resp.body?.data?.desc || hint || JSON.stringify(resp.body)}`, 'err');
+    }
+  } catch (e) {
+    showAuthMsg(`Ошибка: ${e.message}`, 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Продолжить';
   }
 };
 
@@ -231,6 +287,7 @@ const logout = async () => {
   $('authScreen').classList.remove('hidden');
   $('phoneInput').value = '';
   $('otpInput').value = '';
+  $('passwordInput').value = '';
   setAuthStep(1);
   showAuthMsg('', '');
 };
