@@ -46,7 +46,8 @@
         margin-top: 12px;
       }
       input,
-      select {
+      select,
+      textarea {
         width: 100%;
         padding: 12px;
         border: 1px solid #ddd;
@@ -54,7 +55,15 @@
         font-size: 16px;
         outline: none;
       }
-      input:focus {
+      textarea {
+        min-height: 150px;
+        resize: vertical;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      input:focus,
+      textarea:focus {
         border-color: #e31e24;
       }
       .btn {
@@ -274,6 +283,29 @@
         font-size: 13px;
         color: #888;
       }
+      .session-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 10px;
+        margin-top: 12px;
+      }
+      .session-chip {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: #f7f7f7;
+        font-size: 13px;
+      }
+      .session-chip span:first-child {
+        color: #777;
+      }
+      .session-chip span:last-child {
+        font-weight: 700;
+        color: #222;
+        text-align: right;
+      }
     </style>
   </head>
   <body>
@@ -355,6 +387,24 @@
             >
               Выйти
             </button>
+          </div>
+        </div>
+
+        <div class="card" id="sessionCard">
+          <h2>Данные Kaspi для .env</h2>
+          <div class="status-bar status-info" style="text-align: left">
+            Эти значения появились после авторизации. Скопируйте их в <b>/root/parsers/.env</b> для основного
+            ParseHub.
+          </div>
+          <div class="session-grid">
+            <div class="session-chip"><span>tokenSN</span><span id="tokenSnPreview">—</span></div>
+            <div class="session-chip"><span>profileId</span><span id="profileIdPreview">—</span></div>
+          </div>
+          <label>Готовый блок для .env</label>
+          <textarea id="sessionEnv" readonly spellcheck="false"></textarea>
+          <button class="btn btn-primary" onclick="copySessionEnv()">Скопировать .env</button>
+          <div id="sessionCopyMsg" class="hidden status-bar status-ok" style="margin-top: 12px">
+            Данные скопированы.
           </div>
         </div>
 

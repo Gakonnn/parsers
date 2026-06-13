@@ -107,6 +107,32 @@ const formatPhone = (digits) => {
   return `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6, 8)} ${d.slice(8)}`;
 };
 
+const shortValue = (value) => {
+  if (value === null || value === undefined || value === '') return '—';
+  const str = String(value);
+  if (str.length <= 18) return str;
+  return `${str.slice(0, 8)}...${str.slice(-6)}`;
+};
+
+const buildAuthErrorMessage = (body, fallback = 'Ошибка авторизации') => {
+  const viewCode = body?.view?.code;
+  const clientType = body?.data?.analyticObj?.clientType;
+  const headerName = body?.data?.headerName;
+
+  if (viewCode === 'UniversalKaspiIdTakePhoto' || viewCode === 'ViewKaspiIdTakePhoto') {
+    return (
+      'SMS-код принят, но Kaspi запросил Kaspi ID/фото для регистрации. ' +
+      'Это не ошибка кода. Сейчас номер определяется как клиентский аккаунт, а для QR-оплаты нужен аккаунт кассира Kaspi Pay.'
+    );
+  }
+
+  if (clientType === 'customer' || headerName === 'Registration') {
+    return 'Kaspi определил этот номер как клиентский аккаунт/регистрацию. Используйте номер кассира Kaspi Pay.';
+  }
+
+  return body?.data?.desc || body?.data?.message || fallback;
+};
+
 const attachPhoneFormatter = (el) => {
   el.addEventListener('input', () => {
     const digits = digitsOnly(el.value);
@@ -194,7 +220,7 @@ const sendPhone = async () => {
         clientType === 'customer'
           ? 'Этот номер Kaspi определил как клиентский аккаунт. Для QR-оплаты нужен аккаунт кассира Kaspi Pay.'
           : '';
-      showAuthMsg(`Ошибка: ${resp.body?.data?.desc || hint || JSON.stringify(resp.body)}`, 'err');
+      showAuthMsg(`Ошибка: ${hint || buildAuthErrorMessage(resp.body)}`, 'err');
     }
   } catch (e) {
     showAuthMsg(`Ошибка сети: ${e.message}`, 'err');
@@ -231,7 +257,7 @@ const submitPassword = async () => {
         clientType === 'customer'
           ? 'Kaspi всё еще видит этот номер как клиентский аккаунт. Нужен аккаунт кассира Kaspi Pay.'
           : '';
-      showAuthMsg(`Ошибка входа: ${resp.body?.data?.desc || hint || JSON.stringify(resp.body)}`, 'err');
+      showAuthMsg(`Ошибка входа: ${hint || buildAuthErrorMessage(resp.body)}`, 'err');
     }
   } catch (e) {
     showAuthMsg(`Ошибка: ${e.message}`, 'err');
@@ -257,7 +283,7 @@ const verifyOtp = async () => {
       authProcessId = null;
       showMainScreen(resp);
     } else {
-      showAuthMsg(`Неверный код или ошибка: ${resp.body?.data?.desc || JSON.stringify(resp.body)}`, 'err');
+      showAuthMsg(buildAuthErrorMessage(resp.body, 'Kaspi не завершил авторизацию'), 'err');
     }
   } catch (e) {
     showAuthMsg(`Ошибка: ${e.message}`, 'err');
@@ -276,7 +302,40 @@ const showMainScreen = (data) => {
     $('userName').textContent = data.phone || '—';
     $('userOrg').textContent = data.orgName || '—';
     $('userAvatar').textContent = (data.orgName || 'K')[0].toUpperCase();
+    renderSessionEnv(data);
   }
+};
+
+const renderSessionEnv = (data = getSession()) => {
+  const tokenSN = data.tokenSN || '';
+  const vtokenSecret = data.vtokenSecret || '';
+  const profileId = data.profileId || '';
+  const envText = [
+    `KASPI_POS_TOKEN_SN=${tokenSN}`,
+    `KASPI_POS_VTOKEN_SECRET=${vtokenSecret}`,
+    `KASPI_POS_PROFILE_ID=${profileId}`,
+  ].join('\n');
+
+  $('tokenSnPreview').textContent = shortValue(tokenSN);
+  $('profileIdPreview').textContent = profileId || '—';
+  $('sessionEnv').value = envText;
+  $('sessionCard').classList.toggle('hidden', !tokenSN || !vtokenSecret);
+};
+
+const copySessionEnv = async () => {
+  const text = $('sessionEnv').value;
+  const msg = $('sessionCopyMsg');
+  try {
+    await navigator.clipboard.writeText(text);
+    msg.textContent = 'Данные скопированы.';
+    msg.className = 'status-bar status-ok';
+  } catch {
+    $('sessionEnv').select();
+    document.execCommand('copy');
+    msg.textContent = 'Данные выделены и скопированы.';
+    msg.className = 'status-bar status-ok';
+  }
+  msg.classList.remove('hidden');
 };
 
 const logout = async () => {
@@ -767,7 +826,9 @@ const createRefund = async () => {
 
 Object.assign(window, {
   sendPhone,
+  submitPassword,
   verifyOtp,
+  copySessionEnv,
   resetAuth,
   logout,
   switchTab,
