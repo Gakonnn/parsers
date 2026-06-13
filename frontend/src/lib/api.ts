@@ -181,10 +181,11 @@ export const api = {
     apiRequest<unknown>(`/billing/admin/invoices/${invoiceId}/mark-paid`, { method: "POST" }),
 };
 
-export async function downloadResults(format: "csv" | "xlsx" | "json", source = "", allUsers = false): Promise<void> {
+export async function downloadResults(format: "csv" | "xlsx" | "json", source = "", allUsers = false, adservlet = false): Promise<void> {
   const token = getToken();
   const query = new URLSearchParams({ format, all_users: allUsers ? "true" : "false" });
   if (source) query.set("source", source);
+  if (adservlet) query.set("adservlet", "true");
   const response = await fetch(`${apiBase()}/results/export?${query.toString()}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
@@ -193,7 +194,7 @@ export async function downloadResults(format: "csv" | "xlsx" | "json", source = 
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `parser-results.${format}`;
+  anchor.download = adservlet ? `parser-results-adservlet.${format}` : `parser-results.${format}`;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();

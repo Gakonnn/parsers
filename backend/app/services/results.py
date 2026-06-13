@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -19,6 +20,56 @@ from app.schemas.result import ParserResultPublic
 
 PHONE_KEYS = ("seller_phone", "phones", "phone_1", "phone")
 BASE_EXPORT_FIELDS = ("job_id", "run_id", "source", "external_id", "created_at")
+ADSERVLET_BUSINESS_SHEET = "юр лица 2G Kr Ko "
+ADSERVLET_OLX_SHEET = "физ лица OLX"
+ADSERVLET_BUSINESS_SOURCES = {"2gis", "krisha"}
+ADSERVLET_OLX_SOURCES = {"olx"}
+ADSERVLET_BUSINESS_HEADERS = (
+    "Phone",
+    "phone_2",
+    "phone_3",
+    "whatsapp_1",
+    "telegram_1",
+    "Title / Name",
+    "description",
+    "rubrics (интересы)",
+    "country",
+    "Location",
+    "district",
+    "address",
+    "email_1",
+    "email_2",
+    "email_3",
+    "facebook_1",
+    "instagram_1",
+    "instagram_2",
+    "instagram_3",
+    "type",
+)
+ADSERVLET_OLX_HEADERS = (
+    "Phone",
+    "phone_2",
+    "phone_3",
+    "whatsapp_1",
+    "telegram_1",
+    "seller_name",
+    "country",
+    "Location",
+    "Location",
+    "category (интересы)",
+    "title",
+    "description",
+    "пол",
+    "возраст",
+    "email_1",
+    "email_2",
+    "email_3",
+    "facebook_1",
+    "instagram_1",
+    "instagram_2",
+    "instagram_3",
+)
+PHONE_RE = re.compile(r"\+?\d[\d\s().-]{7,}\d")
 
 
 def _parse_datetime(value: str) -> datetime | None:
@@ -282,6 +333,248 @@ def _result_to_export_row(result: ParserResultPublic, payload_fields: list[str])
     return row
 
 
+def _value_parts(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        parts: list[str] = []
+        for item in value:
+            parts.extend(_value_parts(item))
+        return parts
+    if isinstance(value, dict):
+        for key in ("url", "href", "link", "text", "value", "name", "title", "label"):
+            if key in value:
+                parts = _value_parts(value.get(key))
+                if parts:
+                    return parts
+        return [json.dumps(value, ensure_ascii=False)]
+    text_value = str(value).strip()
+    return [text_value] if text_value else []
+
+
+def _payload_values(payload: dict[str, Any], *keys: str) -> list[str]:
+    lowered: dict[str, Any] = {}
+    for key, value in payload.items():
+        lowered.setdefault(str(key).lower(), value)
+
+    values: list[str] = []
+    seen: set[str] = set()
+    for key in keys:
+        raw_value = payload.get(key)
+        if raw_value is None:
+            raw_value = lowered.get(key.lower())
+        for part in _value_parts(raw_value):
+            if part and part not in seen:
+                seen.add(part)
+                values.append(part)
+    return values
+
+
+def _payload_value(payload: dict[str, Any], *keys: str, default: str = "") -> str:
+    values = _payload_values(payload, *keys)
+    return values[0] if values else default
+
+
+def _normalize_phone(raw_value: Any) -> str:
+    digits = re.sub(r"\D+", "", str(raw_value or ""))
+    if not digits:
+        return ""
+    if len(digits) == 11 and digits.startswith("8"):
+        digits = f"7{digits[1:]}"
+    elif len(digits) == 10:
+        digits = f"7{digits}"
+    if len(digits) < 8:
+        return ""
+    return digits
+
+
+def _phones_from_value(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        phones: list[str] = []
+        for item in value:
+            phones.extend(_phones_from_value(item))
+        return phones
+    if isinstance(value, dict):
+        phones = []
+        priority_keys = ("phone", "phones", "phone_1", "phone_2", "phone_3", "number", "text", "value", "href", "url")
+        for key in priority_keys:
+            if key in value:
+                phones.extend(_phones_from_value(value.get(key)))
+        if phones:
+            return phones
+        for item in value.values():
+            phones.extend(_phones_from_value(item))
+        return phones
+
+    text_value = str(value)
+    raw_values = PHONE_RE.findall(text_value) or re.split(r"[;,\n|/]+", text_value)
+    phones = []
+    for raw_phone in raw_values:
+        phone = _normalize_phone(raw_phone)
+        if phone:
+            phones.append(phone)
+    return phones
+
+
+def _extract_phones(payload: dict[str, Any]) -> list[str]:
+    values: list[Any] = []
+    phone_keys = (
+        "seller_phone",
+        "phones",
+        "phone",
+        "phone_1",
+        "phone_2",
+        "phone_3",
+        "phone_numbers",
+        "mobile",
+        "contact_phone",
+        "contacts",
+        "whatsapp",
+        "whatsapp_1",
+    )
+    lowered = {str(key).lower(): value for key, value in payload.items()}
+    for key in phone_keys:
+        if key in payload:
+            values.append(payload[key])
+        elif key.lower() in lowered:
+            values.append(lowered[key.lower()])
+
+    phones: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        for phone in _phones_from_value(value):
+            if phone not in seen:
+                seen.add(phone)
+                phones.append(phone)
+    return phones
+
+
+def _whatsapp_value(payload: dict[str, Any], primary_phone: str) -> str:
+    raw_value = _payload_value(payload, "whatsapp_1", "whatsapp", "WhatsApp")
+    if raw_value:
+        if raw_value.startswith(("http://", "https://")):
+            return raw_value
+        phone = _normalize_phone(raw_value)
+        if phone:
+            return f"https://wa.me/{phone}"
+        return raw_value
+    return f"https://wa.me/{primary_phone}" if primary_phone else ""
+
+
+def _limited_values(payload: dict[str, Any], keys: tuple[str, ...], limit: int) -> list[str]:
+    values = _payload_values(payload, *keys)
+    return [*values[:limit], *([""] * max(0, limit - len(values)))]
+
+
+def _adservlet_business_row(result: ParserResultPublic) -> list[str]:
+    payload = result.payload
+    phones = [*_extract_phones(payload), "", "", ""]
+    emails = _limited_values(payload, ("email_1", "email_2", "email_3", "email", "emails"), 3)
+    facebook = _payload_value(payload, "facebook_1", "facebook", "Facebook")
+    instagram = _limited_values(payload, ("instagram_1", "instagram_2", "instagram_3", "instagram", "Instagram"), 3)
+    source = result.source.strip().lower()
+
+    return [
+        phones[0],
+        phones[1],
+        phones[2],
+        _whatsapp_value(payload, phones[0]),
+        _payload_value(payload, "telegram_1", "telegram", "Telegram"),
+        _payload_value(payload, "name", "title", "seller_name", "company_name", "Title / Name"),
+        _payload_value(payload, "description", "Описание"),
+        _payload_value(payload, "rubrics", "rubric", "category", "categories", "rubrics (интересы)"),
+        _payload_value(payload, "country", "Страна", default="Казахстан"),
+        _payload_value(payload, "city", "location", "region", "Location"),
+        _payload_value(payload, "district", "living_area", "microdistrict", "district_area", "район"),
+        _payload_value(payload, "address", "address_name", "full_address", "street", "адрес"),
+        emails[0],
+        emails[1],
+        emails[2],
+        facebook,
+        instagram[0],
+        instagram[1],
+        instagram[2],
+        _payload_value(payload, "type", default="branch" if source == "2gis" else ""),
+    ]
+
+
+def _adservlet_olx_row(result: ParserResultPublic) -> list[str]:
+    payload = result.payload
+    phones = [*_extract_phones(payload), "", "", ""]
+    emails = _limited_values(payload, ("email_1", "email_2", "email_3", "email", "emails"), 3)
+    facebook = _payload_value(payload, "facebook_1", "facebook", "Facebook")
+    instagram = _limited_values(payload, ("instagram_1", "instagram_2", "instagram_3", "instagram", "Instagram"), 3)
+
+    return [
+        phones[0],
+        phones[1],
+        phones[2],
+        _whatsapp_value(payload, phones[0]),
+        _payload_value(payload, "telegram_1", "telegram", "Telegram"),
+        _payload_value(payload, "seller_name", "name"),
+        _payload_value(payload, "country", "Страна", default="Казахстан"),
+        _payload_value(payload, "city", "region", "location", "Location"),
+        _payload_value(payload, "district", "living_area", "microdistrict", "address", "address_name"),
+        _payload_value(payload, "category", "categories", "rubric", "category (интересы)"),
+        _payload_value(payload, "title", "name"),
+        _payload_value(payload, "description", "Описание"),
+        _payload_value(payload, "пол", "gender", "sex"),
+        _payload_value(payload, "возраст", "age"),
+        emails[0],
+        emails[1],
+        emails[2],
+        facebook,
+        instagram[0],
+        instagram[1],
+        instagram[2],
+    ]
+
+
+def _write_adservlet_sheet(workbook: Any, sheet_name: str, headers: tuple[str, ...], rows: list[list[str]]) -> None:
+    worksheet = workbook.add_worksheet(sheet_name)
+    header_format = workbook.add_format({"bold": True, "bg_color": "#F2F4F7"})
+    for col, header in enumerate(headers):
+        worksheet.write(0, col, header, header_format)
+        worksheet.set_column(col, col, min(max(len(header) + 2, 14), 30))
+    for row_index, row in enumerate(rows, start=1):
+        for col, value in enumerate(row):
+            worksheet.write(row_index, col, value)
+    worksheet.freeze_panes(1, 0)
+    worksheet.autofilter(0, 0, max(len(rows), 1), max(len(headers) - 1, 0))
+
+
+def _adservlet_xlsx_response(items: list[ParserResultPublic]) -> StreamingResponse:
+    try:
+        import xlsxwriter
+    except ModuleNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="xlsxwriter is not installed") from exc
+
+    business_rows = [
+        _adservlet_business_row(item)
+        for item in items
+        if item.source.strip().lower() in ADSERVLET_BUSINESS_SOURCES
+    ]
+    olx_rows = [
+        _adservlet_olx_row(item)
+        for item in items
+        if item.source.strip().lower() in ADSERVLET_OLX_SOURCES
+    ]
+
+    output = io.BytesIO()
+    workbook = xlsxwriter.Workbook(output, {"in_memory": True})
+    _write_adservlet_sheet(workbook, ADSERVLET_BUSINESS_SHEET, ADSERVLET_BUSINESS_HEADERS, business_rows)
+    _write_adservlet_sheet(workbook, ADSERVLET_OLX_SHEET, ADSERVLET_OLX_HEADERS, olx_rows)
+    workbook.close()
+    output.seek(0)
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="parser_results_adservlet.xlsx"'},
+    )
+
+
 def export_results_response(
     db: Session,
     *,
@@ -295,6 +588,7 @@ def export_results_response(
     created_from: str = "",
     created_to: str = "",
     all_users: bool = False,
+    adservlet: bool = False,
 ) -> Response:
     items, _ = list_results(
         db,
@@ -309,6 +603,12 @@ def export_results_response(
         limit=10_000,
         offset=0,
     )
+
+    if adservlet:
+        if export_format != "xlsx":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Adservlet export supports xlsx only")
+        return _adservlet_xlsx_response(items)
+
     payload_fields = _normalize_fields(fields)
     if not payload_fields:
         seen: set[str] = set()

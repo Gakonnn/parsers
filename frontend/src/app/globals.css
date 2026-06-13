@@ -1223,6 +1223,11 @@ button:disabled {
 /* Results and exports */
 .export-panel { margin-bottom: 18px; }
 
+.export-toggle {
+  min-height: 74px;
+  align-self: stretch;
+}
+
 .field-cloud {
   display: flex;
   flex-wrap: wrap;

@@ -70,6 +70,7 @@ def export_results(
     created_from: str = Query(default=""),
     created_to: str = Query(default=""),
     all_users: bool = Query(default=False),
+    adservlet: bool = Query(default=False),
 ) -> Response:
     return export_results_response(
         db,
@@ -83,4 +84,5 @@ def export_results(
         created_from=created_from,
         created_to=created_to,
         all_users=all_users,
+        adservlet=adservlet,
     )

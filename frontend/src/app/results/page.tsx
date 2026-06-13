@@ -9,13 +9,68 @@ import type { ParserResult } from "@/lib/types";
 const sources = ["", "2gis", "olx", "krisha"] as const;
 type VisibleSource = (typeof sources)[number];
 
+const adservletBusinessFields = [
+  "Phone",
+  "phone_2",
+  "phone_3",
+  "whatsapp_1",
+  "telegram_1",
+  "Title / Name",
+  "description",
+  "rubrics (интересы)",
+  "country",
+  "Location",
+  "district",
+  "address",
+  "email_1",
+  "email_2",
+  "email_3",
+  "facebook_1",
+  "instagram_1",
+  "instagram_2",
+  "instagram_3",
+  "type",
+];
+
+const adservletOlxFields = [
+  "Phone",
+  "phone_2",
+  "phone_3",
+  "whatsapp_1",
+  "telegram_1",
+  "seller_name",
+  "country",
+  "Location",
+  "Location",
+  "category (интересы)",
+  "title",
+  "description",
+  "пол",
+  "возраст",
+  "email_1",
+  "email_2",
+  "email_3",
+  "facebook_1",
+  "instagram_1",
+  "instagram_2",
+  "instagram_3",
+];
+
+function adservletFieldsFor(source: VisibleSource): string[] {
+  if (source === "olx") return adservletOlxFields;
+  if (source === "2gis" || source === "krisha") return adservletBusinessFields;
+  return [...adservletBusinessFields, ...adservletOlxFields];
+}
+
 export default function ResultsPage() {
   const [source, setSource] = useState<(typeof sources)[number]>("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [allUsers, setAllUsers] = useState(false);
   const [rows, setRows] = useState<ParserResult[]>([]);
   const [fields, setFields] = useState<string[]>([]);
+  const [adservletExport, setAdservletExport] = useState(false);
   const [busy, setBusy] = useState(false);
+  const visibleFields = adservletExport ? adservletFieldsFor(source) : fields;
 
   async function load(nextSource = source, nextAllUsers = allUsers) {
     const [results, fieldsResponse] = await Promise.all([
@@ -40,7 +95,7 @@ export default function ResultsPage() {
   async function exportData(format: "csv" | "xlsx" | "json") {
     setBusy(true);
     try {
-      await downloadResults(format, source, allUsers);
+      await downloadResults(format, source, allUsers, adservletExport && format === "xlsx");
     } finally {
       setBusy(false);
     }
@@ -55,9 +110,25 @@ export default function ResultsPage() {
             <h2>Фильтр выгрузки</h2>
           </div>
           <div className="button-row">
-            <button className="ghost-button" disabled={busy} onClick={() => exportData("csv")} type="button">CSV</button>
+            <button
+              className="ghost-button"
+              disabled={busy || adservletExport}
+              onClick={() => exportData("csv")}
+              title={adservletExport ? "Шаблон adservlet доступен в Excel" : undefined}
+              type="button"
+            >
+              CSV
+            </button>
             <button className="ghost-button" disabled={busy} onClick={() => exportData("xlsx")} type="button">Excel</button>
-            <button className="ghost-button" disabled={busy} onClick={() => exportData("json")} type="button">JSON</button>
+            <button
+              className="ghost-button"
+              disabled={busy || adservletExport}
+              onClick={() => exportData("json")}
+              title={adservletExport ? "Шаблон adservlet доступен в Excel" : undefined}
+              type="button"
+            >
+              JSON
+            </button>
           </div>
         </div>
         <div className="form-grid three">
@@ -90,17 +161,25 @@ export default function ResultsPage() {
               </select>
             </label>
           ) : null}
+          <label className="toggle-line export-toggle">
+            <input
+              checked={adservletExport}
+              onChange={(event) => setAdservletExport(event.target.checked)}
+              type="checkbox"
+            />
+            <span>Парсинг для адсервлета</span>
+          </label>
           <div className="hint-box">
             <strong>{rows.length}</strong>
             <span>записей в текущей выборке</span>
           </div>
           <div className="hint-box muted">
-            <strong>{fields.length}</strong>
-            <span>полей обнаружено в payload</span>
+            <strong>{visibleFields.length}</strong>
+            <span>{adservletExport ? "полей в adservlet-шаблоне" : "полей обнаружено в payload"}</span>
           </div>
         </div>
         <div className="field-cloud">
-          {fields.map((field) => <span key={field}>{field}</span>)}
+          {visibleFields.map((field, index) => <span key={`${field}-${index}`}>{field}</span>)}
         </div>
       </section>
       <ResultTable rows={rows} />
