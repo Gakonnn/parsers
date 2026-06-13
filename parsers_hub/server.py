@@ -1902,6 +1902,8 @@ def validate_payload(parser_key: str, payload: dict[str, Any]) -> dict[str, Any]
             if value in ("", None):
                 if field.get("required"):
                     raise ValueError(f"Поле '{field['label']}' обязательно")
+                cleaned[name] = ""
+                continue
             try:
                 cleaned[name] = int(value)
             except (TypeError, ValueError) as exc:
