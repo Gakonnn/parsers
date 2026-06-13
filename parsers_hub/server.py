@@ -1399,6 +1399,15 @@ def parser_definitions() -> dict[str, Any]:
             "fields": [
                 {"name": "krisha_location_selector", "label": "Регион Krisha (область / город / район)", "type": "krisha_location_selector", "required": False, "default": ""},
                 {"name": "listing_url", "label": "Ссылка на листинг", "type": "url", "required": True, "default": "https://krisha.kz/prodazha/kvartiry/"},
+                {"name": "deal_type", "label": "Сделка", "type": "select", "required": False, "default": "prodazha", "options": ["prodazha", "arenda"]},
+                {"name": "property_type", "label": "Тип недвижимости", "type": "select", "required": False, "default": "kvartiry", "options": ["kvartiry", "doma-dachi", "garazhi", "uchastkov", "kommercheskaya-nedvizhimost", "biznes", "prombazy", "zarubezhnoj-nedvizhimosti"]},
+                {"name": "rooms", "label": "Комнаты", "type": "select", "required": False, "default": "", "options": ["", "1", "2", "3", "4", "5+"]},
+                {"name": "price_from", "label": "Цена от, ₸", "type": "number", "required": False, "default": ""},
+                {"name": "price_to", "label": "Цена до, ₸", "type": "number", "required": False, "default": ""},
+                {"name": "has_photo", "label": "Есть фото", "type": "checkbox", "required": False, "default": False},
+                {"name": "new_buildings", "label": "Новостройки", "type": "checkbox", "required": False, "default": False},
+                {"name": "from_owner", "label": "От хозяев", "type": "checkbox", "required": False, "default": False},
+                {"name": "from_agent", "label": "От Крыша Агентов", "type": "checkbox", "required": False, "default": False},
                 {"name": "listing_limit", "label": "Лимит объявлений", "type": "number", "required": True, "default": 10},
                 {"name": "output_name", "label": "Имя файла", "type": "text", "required": False, "default": "result_random.json"},
                 {"name": "driver", "label": "Режим", "type": "select", "required": True, "default": "selenium", "options": ["selenium", "http"]},
@@ -1532,6 +1541,24 @@ def build_krisha_command(payload: dict[str, Any]) -> tuple[list[str], Path, Path
         "--report-json",
         str(output_path),
     ]
+    for payload_key, flag, default_value in (
+        ("deal_type", "--deal-type", "prodazha"),
+        ("property_type", "--property-type", "kvartiry"),
+        ("rooms", "--rooms", ""),
+        ("price_from", "--price-from", ""),
+        ("price_to", "--price-to", ""),
+    ):
+        value = str(payload.get(payload_key, "")).strip()
+        if value and value != default_value:
+            command.extend([flag, value])
+    if payload.get("has_photo", False):
+        command.append("--has-photo")
+    if payload.get("new_buildings", False):
+        command.append("--new-buildings")
+    if payload.get("from_owner", False):
+        command.append("--from-owner")
+    if payload.get("from_agent", False):
+        command.append("--from-agent")
     if payload.get("no_proxy", True):
         command.append("--no-proxy")
     if payload.get("headless", False):

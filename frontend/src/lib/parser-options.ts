@@ -8,6 +8,54 @@ export type KrishaLocation = {
   districts?: KrishaLocationChild[];
 };
 export type KrishaLocationChild = { name: string; alias: string; districts?: KrishaLocationChild[] };
+export type KrishaFilterState = {
+  dealType: string;
+  propertyType: string;
+  rooms: string;
+  priceFrom: string;
+  priceTo: string;
+  hasPhoto: boolean;
+  newBuildings: boolean;
+  fromOwner: boolean;
+  fromAgent: boolean;
+};
+
+export const KRISHA_DEAL_TYPES = [
+  { label: "Купить", value: "prodazha" },
+  { label: "Арендовать", value: "arenda" },
+];
+
+export const KRISHA_PROPERTY_TYPES = [
+  { label: "Квартиру", value: "kvartiry" },
+  { label: "Дом или дачу", value: "doma-dachi" },
+  { label: "Гараж или паркинг", value: "garazhi" },
+  { label: "Участок", value: "uchastkov" },
+  { label: "Коммерческую недвижимость", value: "kommercheskaya-nedvizhimost" },
+  { label: "Бизнес", value: "biznes" },
+  { label: "Промбазу или завод", value: "prombazy" },
+  { label: "Зарубежную недвижимость", value: "zarubezhnoj-nedvizhimosti" },
+];
+
+export const KRISHA_ROOM_OPTIONS = [
+  { label: "Любая комнатность", value: "" },
+  { label: "1 комната", value: "1" },
+  { label: "2 комнаты", value: "2" },
+  { label: "3 комнаты", value: "3" },
+  { label: "4 комнаты", value: "4" },
+  { label: "5+ комнат", value: "5.100" },
+];
+
+export const DEFAULT_KRISHA_FILTERS: KrishaFilterState = {
+  dealType: "prodazha",
+  propertyType: "kvartiry",
+  rooms: "",
+  priceFrom: "",
+  priceTo: "",
+  hasPhoto: false,
+  newBuildings: false,
+  fromOwner: false,
+  fromAgent: false,
+};
 
 export const OLX_LOCATIONS: OlxLocationGroup[] = [
   {
@@ -163,19 +211,58 @@ export function parse2gisSearchUrl(rawUrl: string): { domain: string; city: stri
   };
 }
 
-export function buildKrishaListingUrl(baseParts: string[], location = ""): string {
-  const parts = baseParts.length ? [...baseParts] : ["prodazha", "kvartiry"];
-  if (location) parts.push(location);
-  return `https://krisha.kz/${parts.join("/")}/`;
+function krishaQueryString(filters: Partial<KrishaFilterState> = {}): string {
+  const params = new URLSearchParams();
+  const rooms = String(filters.rooms || "").trim();
+  const priceFrom = String(filters.priceFrom || "").trim();
+  const priceTo = String(filters.priceTo || "").trim();
+  if (rooms) params.append("das[live.rooms]", rooms === "5+" ? "5.100" : rooms);
+  if (priceFrom) params.set("das[price][from]", priceFrom);
+  if (priceTo) params.set("das[price][to]", priceTo);
+  if (filters.hasPhoto) params.set("das[_sys.hasphoto]", "1");
+  if (filters.newBuildings) params.set("das[novostroiki]", "1");
+  if (filters.fromOwner) params.set("das[who]", "1");
+  if (filters.fromAgent) params.set("das[_sys.fromAgent]", "1");
+  return params.toString().replace(/%5B/g, "[").replace(/%5D/g, "]");
 }
 
-export function parseKrishaListingUrl(rawUrl: string): { baseParts: string[]; location: string } {
-  const fallback = { baseParts: ["prodazha", "kvartiry"], location: "" };
-  const match = String(rawUrl || "").trim().match(/^https?:\/\/(?:www\.)?krisha\.kz\/([^?#]+)(?:[?#].*)?$/i);
-  if (!match) return fallback;
-  const parts = match[1].replace(/\/+$/, "").split("/").filter(Boolean);
-  const location = KRISHA_LOCATION_ALIASES.has(parts[parts.length - 1]) ? parts.pop() || "" : "";
-  return { baseParts: parts.length ? parts : fallback.baseParts, location };
+function parseKrishaFilters(params: URLSearchParams, baseParts: string[]): KrishaFilterState {
+  return {
+    ...DEFAULT_KRISHA_FILTERS,
+    dealType: baseParts[0] || DEFAULT_KRISHA_FILTERS.dealType,
+    propertyType: baseParts[1] || DEFAULT_KRISHA_FILTERS.propertyType,
+    rooms: params.get("das[live.rooms]") || "",
+    priceFrom: params.get("das[price][from]") || "",
+    priceTo: params.get("das[price][to]") || "",
+    hasPhoto: params.get("das[_sys.hasphoto]") === "1",
+    newBuildings: params.get("das[novostroiki]") === "1",
+    fromOwner: params.get("das[who]") === "1",
+    fromAgent: params.get("das[_sys.fromAgent]") === "1",
+  };
+}
+
+export function buildKrishaListingUrl(baseParts: string[], location = "", filters: Partial<KrishaFilterState> = {}): string {
+  const filterParts = [
+    filters.dealType || baseParts[0] || DEFAULT_KRISHA_FILTERS.dealType,
+    filters.propertyType || baseParts[1] || DEFAULT_KRISHA_FILTERS.propertyType,
+  ];
+  if (location) filterParts.push(location);
+  const query = krishaQueryString(filters);
+  return `https://krisha.kz/${filterParts.join("/")}/${query ? `?${query}` : ""}`;
+}
+
+export function parseKrishaListingUrl(rawUrl: string): { baseParts: string[]; location: string; filters: KrishaFilterState } {
+  const fallback = { baseParts: ["prodazha", "kvartiry"], location: "", filters: DEFAULT_KRISHA_FILTERS };
+  try {
+    const url = new URL(String(rawUrl || "").trim());
+    if (!/^(www\.)?krisha\.kz$/i.test(url.hostname)) return fallback;
+    const parts = url.pathname.replace(/\/+$/, "").split("/").filter(Boolean);
+    const location = KRISHA_LOCATION_ALIASES.has(parts[parts.length - 1]) ? parts.pop() || "" : "";
+    const baseParts = parts.length ? parts : fallback.baseParts;
+    return { baseParts, location, filters: parseKrishaFilters(url.searchParams, baseParts) };
+  } catch {
+    return fallback;
+  }
 }
 
 export function findKrishaLocationByAlias(alias: string): { root: KrishaLocation; city: KrishaLocationChild | null; district: KrishaLocationChild | null } {

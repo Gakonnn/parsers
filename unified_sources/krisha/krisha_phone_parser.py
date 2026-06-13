@@ -29,7 +29,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from urllib.request import ProxyHandler, Request, build_opener
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -210,6 +210,50 @@ DEFAULT_LISTING_URL = "https://krisha.kz/prodazha/kvartiry/"
 DEFAULT_CHROME_USER_DATA_DIR = str(Path.home() / "Library/Application Support/Google/Chrome")
 DEFAULT_CHROME_PROFILE_DIRECTORY = "Default"
 CHECKPOINT_SUFFIX = ".checkpoint.json"
+
+KRISHA_DEAL_TYPES = {
+    "buy": "prodazha",
+    "sale": "prodazha",
+    "sell": "prodazha",
+    "prodazha": "prodazha",
+    "kupit": "prodazha",
+    "rent": "arenda",
+    "lease": "arenda",
+    "arenda": "arenda",
+    "snyat": "arenda",
+}
+KRISHA_PROPERTY_TYPES = {
+    "flat": "kvartiry",
+    "flats": "kvartiry",
+    "apartment": "kvartiry",
+    "apartments": "kvartiry",
+    "kvartira": "kvartiry",
+    "kvartiry": "kvartiry",
+    "house": "doma-dachi",
+    "houses": "doma-dachi",
+    "home": "doma-dachi",
+    "dacha": "doma-dachi",
+    "doma": "doma-dachi",
+    "doma-dachi": "doma-dachi",
+    "garage": "garazhi",
+    "garages": "garazhi",
+    "parking": "garazhi",
+    "garazhi": "garazhi",
+    "uchastok": "uchastkov",
+    "land": "uchastkov",
+    "uchastki": "uchastkov",
+    "uchastkov": "uchastkov",
+    "commercial": "kommercheskaya-nedvizhimost",
+    "commerce": "kommercheskaya-nedvizhimost",
+    "kommercheskaya-nedvizhimost": "kommercheskaya-nedvizhimost",
+    "business": "biznes",
+    "biznes": "biznes",
+    "factory": "prombazy",
+    "prombazy": "prombazy",
+    "foreign": "zarubezhnoj-nedvizhimosti",
+    "zarubezhnoj-nedvizhimosti": "zarubezhnoj-nedvizhimosti",
+}
+KRISHA_ROOM_VALUES = {"1", "2", "3", "4", "5", "5.100"}
 
 
 class ProxyUnavailableError(RuntimeError):
@@ -520,6 +564,126 @@ def normalize_listing_ad_url(url: str) -> str:
     return f"https://krisha.kz{url}"
 
 
+def normalize_krisha_slug(value: str, aliases: dict[str, str]) -> str:
+    cleaned = str(value or "").strip().lower()
+    if not cleaned:
+        return ""
+    return aliases.get(cleaned, cleaned)
+
+
+def split_filter_values(value: str) -> list[str]:
+    return [part.strip() for part in re.split(r"[,;\s]+", str(value or "")) if part.strip()]
+
+
+def normalize_room_filters(value: str) -> list[str]:
+    rooms: list[str] = []
+    seen: set[str] = set()
+    for raw_room in split_filter_values(value):
+        room = raw_room.lower().replace("+", ".100")
+        if room in {"5plus", "5-plus", "5_and_more", "5andmore"}:
+            room = "5.100"
+        if room not in KRISHA_ROOM_VALUES or room in seen:
+            continue
+        seen.add(room)
+        rooms.append(room)
+    return rooms
+
+
+def clean_numeric_filter(value: str | int | float | None) -> str:
+    text = str(value or "").strip().replace(" ", "").replace(",", ".")
+    if not text:
+        return ""
+    try:
+        number = float(text)
+    except ValueError:
+        return ""
+    if number <= 0:
+        return ""
+    return str(int(number)) if number.is_integer() else str(number)
+
+
+def build_listing_page_url(listing_url: str, page: int) -> str:
+    if page <= 1:
+        return listing_url
+    parsed = urlparse(listing_url)
+    query = parse_qs(parsed.query, keep_blank_values=True)
+    query["page"] = [str(page)]
+    return urlunparse(
+        parsed._replace(
+            path=parsed.path.rstrip("/") + "/",
+            query=urlencode(query, doseq=True, safe="[]"),
+        )
+    )
+
+
+def build_filtered_listing_url(
+    listing_url: str,
+    *,
+    deal_type: str = "",
+    property_type: str = "",
+    krisha_location: str = "",
+    rooms: str = "",
+    price_from: str = "",
+    price_to: str = "",
+    has_photo: bool = False,
+    new_buildings: bool = False,
+    from_owner: bool = False,
+    from_agent: bool = False,
+) -> str:
+    parsed = urlparse((listing_url or DEFAULT_LISTING_URL).strip() or DEFAULT_LISTING_URL)
+    scheme = parsed.scheme or "https"
+    netloc = parsed.netloc or "krisha.kz"
+    parts = [part for part in parsed.path.split("/") if part]
+    if not parts:
+        parts = ["prodazha", "kvartiry"]
+    while len(parts) < 2:
+        parts.append("kvartiry")
+
+    section = normalize_krisha_slug(deal_type, KRISHA_DEAL_TYPES)
+    category = normalize_krisha_slug(property_type, KRISHA_PROPERTY_TYPES)
+    if section:
+        parts[0] = section
+    if category:
+        parts[1] = category
+    if krisha_location.strip():
+        parts = parts[:2] + [krisha_location.strip().strip("/")]
+
+    query = parse_qs(parsed.query, keep_blank_values=True)
+    query.pop("page", None)
+
+    room_values = normalize_room_filters(rooms)
+    if room_values:
+        query["das[live.rooms]"] = room_values
+
+    price_from_value = clean_numeric_filter(price_from)
+    price_to_value = clean_numeric_filter(price_to)
+    if price_from_value:
+        query["das[price][from]"] = [price_from_value]
+    if price_to_value:
+        query["das[price][to]"] = [price_to_value]
+
+    bool_filters = {
+        "das[_sys.hasphoto]": has_photo,
+        "das[novostroiki]": new_buildings,
+        "das[who]": from_owner,
+        "das[_sys.fromAgent]": from_agent,
+    }
+    for key, enabled in bool_filters.items():
+        if enabled:
+            query[key] = ["1"]
+
+    return urlunparse(
+        (
+            scheme,
+            netloc,
+            "/" + "/".join(parts).strip("/") + "/",
+            "",
+            urlencode(query, doseq=True, safe="[]"),
+            "",
+        )
+    )
+
+
 def prompt_listing_limit() -> int:
     while True:
         raw = input(f"Сколько объявлений парсить с {DEFAULT_LISTING_URL}? ").strip()
@@ -559,7 +723,7 @@ def fetch_ads_from_listing(
     consecutive_empty_pages = 0
 
     while len(ads) < limit:
-        page_url = listing_url if page == 1 else f"{listing_url.rstrip('/')}/?page={page}"
+        page_url = build_listing_page_url(listing_url, page)
         last_error: Exception | None = None
         result: ProxyResult | None = None
         for attempt in range(max(1, attempts_per_page)):
@@ -636,7 +800,7 @@ def fetch_ads_from_listing_selenium(
         inject_cookies(driver, cookie, browser_cookies)
 
         while len(ads) < limit:
-            page_url = listing_url if page == 1 else f"{listing_url.rstrip('/')}/?page={page}"
+            page_url = build_listing_page_url(listing_url, page)
             if not safe_get(driver, page_url, timeout_override=max(timeout, 15.0)):
                 break
             try:
@@ -702,7 +866,7 @@ def fetch_listing_page_html_selenium(
         browser_cookies = load_browser_cookies(cookie_json_path(cookie_base_file))
         inject_cookies(driver, cookie, browser_cookies)
 
-        page_url = listing_url if page == 1 else f"{listing_url.rstrip('/')}/?page={page}"
+        page_url = build_listing_page_url(listing_url, page)
         if not safe_get(driver, page_url, timeout_override=max(timeout, 15.0)):
             return ""
         try:
@@ -741,7 +905,7 @@ def iter_listing_ad_pages(
     collected = 0
 
     while collected < limit:
-        page_url = listing_url if page == 1 else f"{listing_url.rstrip('/')}/?page={page}"
+        page_url = build_listing_page_url(listing_url, page)
         last_error: Exception | None = None
         html = ""
         for attempt in range(max(1, attempts_per_page)):
@@ -2850,6 +3014,32 @@ def build_parser() -> argparse.ArgumentParser:
         help="How many ads to collect from listing page",
     )
     parser.add_argument(
+        "--deal-type",
+        default="",
+        help="Krisha deal path filter: prodazha/arenda (aliases: buy/rent)",
+    )
+    parser.add_argument(
+        "--property-type",
+        default="",
+        help="Krisha property path filter: kvartiry, doma-dachi, garazhi, uchastkov, etc.",
+    )
+    parser.add_argument(
+        "--krisha-location",
+        default="",
+        help="Krisha location alias appended to the listing path, for example almaty or astana-esilskij",
+    )
+    parser.add_argument(
+        "--rooms",
+        default="",
+        help="Comma-separated room filters: 1,2,3,4,5 or 5+ (Krisha value 5.100)",
+    )
+    parser.add_argument("--price-from", default="", help="Minimum listing price in KZT")
+    parser.add_argument("--price-to", default="", help="Maximum listing price in KZT")
+    parser.add_argument("--has-photo", action="store_true", help="Only listings with photos")
+    parser.add_argument("--new-buildings", action="store_true", help="Only new-building listings")
+    parser.add_argument("--from-owner", action="store_true", help="Only owner listings")
+    parser.add_argument("--from-agent", action="store_true", help="Only Krisha Agent listings")
+    parser.add_argument(
         "--proxies-file",
         default="proxyscrape_premium_http_proxies.txt",
         help="Path to proxy list file (host:port per line)",
@@ -2989,6 +3179,34 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
+    args.listing_url = build_filtered_listing_url(
+        args.listing_url,
+        deal_type=args.deal_type,
+        property_type=args.property_type,
+        krisha_location=args.krisha_location,
+        rooms=args.rooms,
+        price_from=args.price_from,
+        price_to=args.price_to,
+        has_photo=args.has_photo,
+        new_buildings=args.new_buildings,
+        from_owner=args.from_owner,
+        from_agent=args.from_agent,
+    )
+    if any(
+        [
+            args.deal_type,
+            args.property_type,
+            args.krisha_location,
+            args.rooms,
+            args.price_from,
+            args.price_to,
+            args.has_photo,
+            args.new_buildings,
+            args.from_owner,
+            args.from_agent,
+        ]
+    ):
+        print(f"[listing] filtered_url={args.listing_url}")
     db_url = (
         args.database_url.strip()
         or os.environ.get("PARSER_LIVE_DB_URL", "").strip()

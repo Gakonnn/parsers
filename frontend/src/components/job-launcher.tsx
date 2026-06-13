@@ -3,8 +3,12 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import {
+  DEFAULT_KRISHA_FILTERS,
   OLX_LOCATIONS,
   KRISHA_LOCATIONS,
+  KRISHA_DEAL_TYPES,
+  KRISHA_PROPERTY_TYPES,
+  KRISHA_ROOM_OPTIONS,
   build2gisSearchUrl,
   buildKrishaListingUrl,
   buildOlxCategoryUrl,
@@ -13,6 +17,7 @@ import {
   parseKrishaListingUrl,
   parseOlxUrlPath,
 } from "@/lib/parser-options";
+import type { KrishaFilterState } from "@/lib/parser-options";
 import type { OlxCategoriesTree, ParserJob, ParserSource, TwoGisCitiesTree, TwoGisRubricsTree } from "@/lib/types";
 
 type LaunchParserSource = Exclude<ParserSource, "kolesa">;
@@ -30,7 +35,7 @@ const sourceDefaults: Record<LaunchParserSource, { label: string; urlLabel: stri
     urlLabel: "Ссылка листинга",
     url: "https://krisha.kz/prodazha/kvartiry/",
     limitLabel: "Лимит объявлений",
-    hint: "Можно выбрать область, город или район. Самый глубокий уровень попадет в URL.",
+    hint: "Фильтры собираются как на Krisha: сделка, тип, регион, комнаты, цена и основные галочки.",
   },
   "2gis": {
     label: "2GIS",
@@ -41,7 +46,7 @@ const sourceDefaults: Record<LaunchParserSource, { label: string; urlLabel: stri
   },
 };
 
-function buildParameters(source: LaunchParserSource, url: string, limit: number): Record<string, unknown> {
+function buildParameters(source: LaunchParserSource, url: string, limit: number, krishaFilters: KrishaFilterState): Record<string, unknown> {
   if (source === "olx") return { category_url: url, limit, output_name: "" };
   if (source === "2gis") {
     return {
@@ -58,6 +63,15 @@ function buildParameters(source: LaunchParserSource, url: string, limit: number)
     return {
       listing_url: url,
       listing_limit: limit,
+      deal_type: krishaFilters.dealType,
+      property_type: krishaFilters.propertyType,
+      rooms: krishaFilters.rooms === "5.100" ? "5+" : krishaFilters.rooms,
+      price_from: krishaFilters.priceFrom,
+      price_to: krishaFilters.priceTo,
+      has_photo: krishaFilters.hasPhoto,
+      new_buildings: krishaFilters.newBuildings,
+      from_owner: krishaFilters.fromOwner,
+      from_agent: krishaFilters.fromAgent,
       output_name: "result_random.json",
       driver: "selenium",
       browser: "chrome",
@@ -104,6 +118,15 @@ export function JobLauncher({ onCreated }: { onCreated?: (job: ParserJob) => voi
   const [krishaRoot, setKrishaRoot] = useState("");
   const [krishaCity, setKrishaCity] = useState("");
   const [krishaDistrict, setKrishaDistrict] = useState("");
+  const [krishaDealType, setKrishaDealType] = useState(DEFAULT_KRISHA_FILTERS.dealType);
+  const [krishaPropertyType, setKrishaPropertyType] = useState(DEFAULT_KRISHA_FILTERS.propertyType);
+  const [krishaRooms, setKrishaRooms] = useState(DEFAULT_KRISHA_FILTERS.rooms);
+  const [krishaPriceFrom, setKrishaPriceFrom] = useState(DEFAULT_KRISHA_FILTERS.priceFrom);
+  const [krishaPriceTo, setKrishaPriceTo] = useState(DEFAULT_KRISHA_FILTERS.priceTo);
+  const [krishaHasPhoto, setKrishaHasPhoto] = useState(DEFAULT_KRISHA_FILTERS.hasPhoto);
+  const [krishaNewBuildings, setKrishaNewBuildings] = useState(DEFAULT_KRISHA_FILTERS.newBuildings);
+  const [krishaFromOwner, setKrishaFromOwner] = useState(DEFAULT_KRISHA_FILTERS.fromOwner);
+  const [krishaFromAgent, setKrishaFromAgent] = useState(DEFAULT_KRISHA_FILTERS.fromAgent);
 
   const selected = useMemo(() => sourceDefaults[source], [source]);
   const olxLevel1Items = olxTree?.level1 || [];
@@ -127,6 +150,27 @@ export function JobLauncher({ onCreated }: { onCreated?: (job: ParserJob) => voi
   const krishaCityItems = selectedKrishaRoot.cities || [];
   const selectedKrishaCity = krishaCityItems.find((item) => item.alias === krishaCity) || null;
   const krishaDistrictItems = selectedKrishaCity?.districts || selectedKrishaRoot.districts || [];
+  const krishaFilters = useMemo<KrishaFilterState>(() => ({
+    dealType: krishaDealType,
+    propertyType: krishaPropertyType,
+    rooms: krishaRooms,
+    priceFrom: krishaPriceFrom,
+    priceTo: krishaPriceTo,
+    hasPhoto: krishaHasPhoto,
+    newBuildings: krishaNewBuildings,
+    fromOwner: krishaFromOwner,
+    fromAgent: krishaFromAgent,
+  }), [
+    krishaDealType,
+    krishaPropertyType,
+    krishaRooms,
+    krishaPriceFrom,
+    krishaPriceTo,
+    krishaHasPhoto,
+    krishaNewBuildings,
+    krishaFromOwner,
+    krishaFromAgent,
+  ]);
 
   useEffect(() => {
     if (source !== "olx" || olxTree || olxLoading) return;
@@ -187,17 +231,43 @@ export function JobLauncher({ onCreated }: { onCreated?: (job: ParserJob) => voi
     setKrishaRoot(initial.root.alias);
     setKrishaCity(initial.city?.alias || "");
     setKrishaDistrict(initial.district?.alias || "");
+    setKrishaDealType(parsed.filters.dealType || DEFAULT_KRISHA_FILTERS.dealType);
+    setKrishaPropertyType(parsed.filters.propertyType || DEFAULT_KRISHA_FILTERS.propertyType);
+    setKrishaRooms(parsed.filters.rooms || "");
+    setKrishaPriceFrom(parsed.filters.priceFrom || "");
+    setKrishaPriceTo(parsed.filters.priceTo || "");
+    setKrishaHasPhoto(parsed.filters.hasPhoto);
+    setKrishaNewBuildings(parsed.filters.newBuildings);
+    setKrishaFromOwner(parsed.filters.fromOwner);
+    setKrishaFromAgent(parsed.filters.fromAgent);
   }, [source]);
 
   const generatedUrl = useMemo(() => {
     if (source === "olx") return buildOlxCategoryUrl(olxL1, olxL2, olxL3, olxLocation);
     if (source === "2gis") return build2gisSearchUrl(gisDomain, gisCity, gisL3 || gisL2 || gisL1);
     if (source === "krisha") {
-      const parsed = parseKrishaListingUrl(url);
-      return buildKrishaListingUrl(parsed.baseParts, krishaDistrict || krishaCity || krishaRoot);
+      return buildKrishaListingUrl([krishaDealType, krishaPropertyType], krishaDistrict || krishaCity || krishaRoot, krishaFilters);
     }
     return url;
-  }, [source, olxL1, olxL2, olxL3, olxLocation, gisDomain, gisCity, gisL1, gisL2, gisL3, krishaRoot, krishaCity, krishaDistrict, url]);
+  }, [
+    source,
+    olxL1,
+    olxL2,
+    olxL3,
+    olxLocation,
+    gisDomain,
+    gisCity,
+    gisL1,
+    gisL2,
+    gisL3,
+    krishaRoot,
+    krishaCity,
+    krishaDistrict,
+    krishaDealType,
+    krishaPropertyType,
+    krishaFilters,
+    url,
+  ]);
 
   useEffect(() => {
     if (manualUrl || !generatedUrl || generatedUrl === url) return;
@@ -216,6 +286,17 @@ export function JobLauncher({ onCreated }: { onCreated?: (job: ParserJob) => voi
       setGisL2("");
       setGisL3("");
     }
+    if (next === "krisha") {
+      setKrishaDealType(DEFAULT_KRISHA_FILTERS.dealType);
+      setKrishaPropertyType(DEFAULT_KRISHA_FILTERS.propertyType);
+      setKrishaRooms(DEFAULT_KRISHA_FILTERS.rooms);
+      setKrishaPriceFrom(DEFAULT_KRISHA_FILTERS.priceFrom);
+      setKrishaPriceTo(DEFAULT_KRISHA_FILTERS.priceTo);
+      setKrishaHasPhoto(DEFAULT_KRISHA_FILTERS.hasPhoto);
+      setKrishaNewBuildings(DEFAULT_KRISHA_FILTERS.newBuildings);
+      setKrishaFromOwner(DEFAULT_KRISHA_FILTERS.fromOwner);
+      setKrishaFromAgent(DEFAULT_KRISHA_FILTERS.fromAgent);
+    }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -225,7 +306,8 @@ export function JobLauncher({ onCreated }: { onCreated?: (job: ParserJob) => voi
     try {
       const safeLimit = Math.max(1, Math.min(5000, Number(limit) || 1));
       const finalUrl = manualUrl ? url.trim() : (generatedUrl || url).trim();
-      const job = await api.createJob(source, buildParameters(source, finalUrl, safeLimit), safeLimit);
+      const finalKrishaFilters = source === "krisha" && manualUrl ? parseKrishaListingUrl(finalUrl).filters : krishaFilters;
+      const job = await api.createJob(source, buildParameters(source, finalUrl, safeLimit, finalKrishaFilters), safeLimit);
       setUrl(finalUrl);
       setMessage("Задача создана и поставлена в очередь.");
       onCreated?.(job);
@@ -282,11 +364,22 @@ export function JobLauncher({ onCreated }: { onCreated?: (job: ParserJob) => voi
 
       {source === "krisha" ? (
         <div className="selector-card">
-          <div className="selector-title"><strong>Регион Krisha</strong><span>{selectedText([selectedKrishaRoot.name, selectedKrishaCity?.name || "", krishaDistrictItems.find((item) => item.alias === krishaDistrict)?.name || ""])}</span></div>
+          <div className="selector-title"><strong>Фильтры Krisha</strong><span>{selectedText([KRISHA_DEAL_TYPES.find((item) => item.value === krishaDealType)?.label || "", KRISHA_PROPERTY_TYPES.find((item) => item.value === krishaPropertyType)?.label || "", selectedKrishaRoot.name, selectedKrishaCity?.name || "", krishaDistrictItems.find((item) => item.alias === krishaDistrict)?.name || ""])}</span></div>
           <div className="selector-grid">
+            <label className="field-block compact"><span>Сделка</span><select value={krishaDealType} onChange={(event) => setKrishaDealType(event.target.value)}>{KRISHA_DEAL_TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+            <label className="field-block compact"><span>Тип</span><select value={krishaPropertyType} onChange={(event) => setKrishaPropertyType(event.target.value)}>{KRISHA_PROPERTY_TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
             <label className="field-block compact"><span>Область / город</span><select value={krishaRoot} onChange={(event) => { setKrishaRoot(event.target.value); setKrishaCity(""); setKrishaDistrict(""); }}>{KRISHA_LOCATIONS.map((item) => <option key={item.alias || "country"} value={item.alias}>{item.name}</option>)}</select></label>
             <label className="field-block compact"><span>Город</span><select value={krishaCity} onChange={(event) => { setKrishaCity(event.target.value); setKrishaDistrict(""); }} disabled={!krishaCityItems.length}><option value="">{selectedKrishaRoot.type === "region" ? "Вся область" : "Не требуется"}</option>{krishaCityItems.map((item) => <option key={item.alias} value={item.alias}>{item.name}</option>)}</select></label>
             <label className="field-block compact wide-selector"><span>Район</span><select value={krishaDistrict} onChange={(event) => setKrishaDistrict(event.target.value)} disabled={!krishaDistrictItems.length}><option value="">Весь город / регион</option>{krishaDistrictItems.map((item) => <option key={item.alias} value={item.alias}>{item.name}</option>)}</select></label>
+            <label className="field-block compact"><span>Комнаты</span><select value={krishaRooms} onChange={(event) => setKrishaRooms(event.target.value)}>{KRISHA_ROOM_OPTIONS.map((item) => <option key={item.value || "any"} value={item.value}>{item.label}</option>)}</select></label>
+            <label className="field-block compact"><span>Цена от, ₸</span><input min={0} type="number" value={krishaPriceFrom} onChange={(event) => setKrishaPriceFrom(event.target.value)} /></label>
+            <label className="field-block compact"><span>Цена до, ₸</span><input min={0} type="number" value={krishaPriceTo} onChange={(event) => setKrishaPriceTo(event.target.value)} /></label>
+            <div className="source-checkboxes wide-selector krisha-filter-toggles">
+              <label><input type="checkbox" checked={krishaHasPhoto} onChange={(event) => setKrishaHasPhoto(event.target.checked)} /><span>Есть фото</span></label>
+              <label><input type="checkbox" checked={krishaNewBuildings} onChange={(event) => setKrishaNewBuildings(event.target.checked)} /><span>Новостройки</span></label>
+              <label><input type="checkbox" checked={krishaFromOwner} onChange={(event) => setKrishaFromOwner(event.target.checked)} /><span>От хозяев</span></label>
+              <label><input type="checkbox" checked={krishaFromAgent} onChange={(event) => setKrishaFromAgent(event.target.checked)} /><span>От Крыша Агентов</span></label>
+            </div>
           </div>
         </div>
       ) : null}

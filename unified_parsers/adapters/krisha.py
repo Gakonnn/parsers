@@ -20,6 +20,16 @@ class KrishaAdapter(SourceAdapter):
             help="Listing URL for Krisha parser",
         )
         parser.add_argument("--listing-limit", type=int, default=10, help="Ads limit")
+        parser.add_argument("--deal-type", default="", help="Krisha deal filter: prodazha/arenda")
+        parser.add_argument("--property-type", default="", help="Krisha property filter, e.g. kvartiry")
+        parser.add_argument("--krisha-location", default="", help="Krisha location alias")
+        parser.add_argument("--rooms", default="", help="Comma-separated room filters, e.g. 1,2,5+")
+        parser.add_argument("--price-from", default="", help="Minimum listing price in KZT")
+        parser.add_argument("--price-to", default="", help="Maximum listing price in KZT")
+        parser.add_argument("--has-photo", action="store_true", help="Only listings with photos")
+        parser.add_argument("--new-buildings", action="store_true", help="Only new-building listings")
+        parser.add_argument("--from-owner", action="store_true", help="Only owner listings")
+        parser.add_argument("--from-agent", action="store_true", help="Only Krisha Agent listings")
         parser.add_argument("--driver", choices=["selenium", "http"], default="selenium", help="Driver mode")
         parser.add_argument("--browser", choices=["chrome", "safari"], default="chrome", help="Selenium browser")
         parser.add_argument("--delay", type=float, default=0.7, help="Delay between ads")
@@ -75,6 +85,27 @@ class KrishaAdapter(SourceAdapter):
             "--output",
             str(output_path),
         ]
+
+        for flag, value in (
+            ("--deal-type", getattr(args, "deal_type", "")),
+            ("--property-type", getattr(args, "property_type", "")),
+            ("--krisha-location", getattr(args, "krisha_location", "")),
+            ("--rooms", getattr(args, "rooms", "")),
+            ("--price-from", getattr(args, "price_from", "")),
+            ("--price-to", getattr(args, "price_to", "")),
+        ):
+            clean_value = str(value).strip()
+            if clean_value:
+                command.extend([flag, clean_value])
+
+        if getattr(args, "has_photo", False):
+            command.append("--has-photo")
+        if getattr(args, "new_buildings", False):
+            command.append("--new-buildings")
+        if getattr(args, "from_owner", False):
+            command.append("--from-owner")
+        if getattr(args, "from_agent", False):
+            command.append("--from-agent")
 
         if args.no_proxy:
             command.append("--no-proxy")
