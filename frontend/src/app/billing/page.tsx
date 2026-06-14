@@ -23,6 +23,12 @@ function limitLabel(value: number, suffix: string): string {
   return value === -1 ? "Безлимит" : `${value}${suffix ? ` ${suffix}` : ""}`;
 }
 
+function quotaLabel(value?: number | null): string {
+  if (value === undefined || value === null) return "—";
+  if (value < 0) return "Безлимит";
+  return new Intl.NumberFormat("ru-KZ").format(value);
+}
+
 function kaspiMeta(invoice: Invoice | null): KaspiQrMetadata {
   const meta = invoice?.metadata_json?.kaspi_qr;
   return meta && typeof meta === "object" && !Array.isArray(meta) ? (meta as KaspiQrMetadata) : {};
@@ -71,6 +77,7 @@ export default function BillingPage() {
   const activeQrToken = activeInvoice?.payment_url || activeKaspiMeta.qr_token || "";
   const kaspiEnabled = Boolean(provider?.kaspi_qr_enabled);
   const canUseKaspi = kaspiEnabled && provider !== null;
+  const currentPlan = usage?.subscription.plan;
 
   useEffect(() => {
     let cancelled = false;
@@ -144,13 +151,30 @@ export default function BillingPage() {
 
   return (
     <AppShell eyebrow="Оплата" title="Тарифы и оплата">
-      <section className="billing-hero parsehub-billing-hero">
-        <div>
-          <span className="eyebrow">Текущий тариф</span>
-          <h2>{usage?.subscription.plan.name || "—"}</h2>
-          <p>{usage?.records_used ?? 0} записей использовано в этом месяце.</p>
+      <section className="billing-subscription-hero">
+        <div className="billing-subscription-copy">
+          <span className="eyebrow">Управление подпиской</span>
+          <h2>Статус аккаунта</h2>
+          <p>Проверяйте остатки лимитов и управляйте своим текущим тарифным планом.</p>
         </div>
-        <StatusPill status={usage?.subscription.status || "active"} />
+        <div className="billing-subscription-summary" aria-label="Остаток от тарифа">
+          <span className="billing-summary-title">Остаток от тарифа</span>
+          <div className="billing-summary-metrics">
+            <div>
+              <span>План</span>
+              <strong className="parsehub-plan-name">{currentPlan?.name || "—"}</strong>
+            </div>
+            <div>
+              <span>Запусков</span>
+              <strong>{quotaLabel(usage?.jobs_remaining ?? currentPlan?.max_jobs_per_month)}</strong>
+            </div>
+            <div>
+              <span>Записей</span>
+              <strong>{quotaLabel(usage?.records_remaining ?? currentPlan?.max_records_per_month)}</strong>
+            </div>
+          </div>
+          <StatusPill status={usage?.subscription.status || "active"} />
+        </div>
       </section>
 
       <section className="payment-method-panel">

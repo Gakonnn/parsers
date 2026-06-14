@@ -4747,3 +4747,331 @@ body {
     gap: 38px;
   }
 }
+
+/* DataLeadHub production scale: closer to the original ParseHubFront rhythm */
+body {
+  font-size: 14px;
+}
+
+.parsehub-shell {
+  padding-top: 126px;
+}
+
+.parsehub-main {
+  width: min(1728px, calc(100% - 64px));
+}
+
+.parsehub-brand strong {
+  font-size: clamp(23px, 1.85vw, 30px);
+  letter-spacing: -0.07em;
+}
+
+.parsehub-nav a,
+.parsehub-login-link,
+.parsehub-register-link,
+.parsehub-notice {
+  font-size: 10.5px;
+  letter-spacing: 0.24em;
+}
+
+.topbar h1,
+.job-hero-copy h2,
+.settings-hero h2,
+.billing-hero h2,
+.section-heading h2,
+.auth-card h2,
+.launcher-card h2,
+.panel-card h2 {
+  font-size: clamp(25px, 2.35vw, 38px);
+  line-height: 0.98;
+  letter-spacing: -0.06em;
+  text-wrap: balance;
+}
+
+.public-hero h1 {
+  font-size: clamp(46px, 6vw, 78px);
+  line-height: 0.9;
+}
+
+.public-hero p,
+.job-hero-copy p,
+.settings-hero p,
+.billing-subscription-copy p,
+.plan-card p,
+.public-plan-card p {
+  text-wrap: pretty;
+}
+
+.billing-subscription-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(560px, 0.85fr);
+  align-items: center;
+  gap: clamp(32px, 5vw, 92px);
+  min-height: 236px;
+  margin-bottom: 58px;
+  padding: clamp(42px, 5vw, 58px);
+  border: 1px solid rgba(11, 99, 246, 0.09);
+  border-radius: 42px;
+  background: #ffffff;
+  box-shadow: 0 20px 54px rgba(15, 23, 42, 0.055), 0 0 0 1px rgba(11, 99, 246, 0.035);
+}
+
+.billing-subscription-copy h2 {
+  margin: 10px 0 12px;
+  color: #0f172a;
+  font-size: clamp(28px, 2.05vw, 34px);
+  font-weight: 760;
+  line-height: 0.98;
+  letter-spacing: -0.065em;
+}
+
+.billing-subscription-copy p {
+  max-width: 520px;
+  margin: 0;
+  color: #6b7a96;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.billing-subscription-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 28px;
+  min-height: 132px;
+  padding: 30px 34px;
+  border: 1px solid rgba(11, 99, 246, 0.08);
+  border-radius: 34px;
+  background: linear-gradient(145deg, #ffffff 0%, #f8fbff 100%);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.035);
+}
+
+.billing-summary-title {
+  grid-column: 1 / -1;
+  margin-bottom: -6px;
+  color: #6b7a96;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+.billing-summary-metrics {
+  display: grid;
+  grid-template-columns: minmax(110px, 1.15fr) repeat(2, minmax(92px, 0.8fr));
+  gap: 0;
+}
+
+.billing-summary-metrics > div {
+  display: grid;
+  gap: 8px;
+  padding: 0 26px;
+  border-right: 1px solid rgba(11, 99, 246, 0.09);
+}
+
+.billing-summary-metrics > div:first-child {
+  padding-left: 0;
+}
+
+.billing-summary-metrics > div:last-child {
+  border-right: 0;
+}
+
+.billing-summary-metrics span {
+  color: #6b7a96;
+  font-size: 9px;
+  font-weight: 760;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.billing-summary-metrics strong {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 760;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.billing-subscription-summary .status-pill {
+  min-width: 148px;
+  min-height: 44px;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 10px;
+}
+
+.payment-method-panel,
+.kaspi-qr-panel {
+  margin-top: 26px;
+  padding: 30px;
+  border-radius: 34px;
+}
+
+.section-heading.compact h2 {
+  font-size: clamp(24px, 2.25vw, 34px);
+}
+
+.payment-option {
+  min-height: 132px;
+  padding: 22px;
+  border-radius: 26px;
+}
+
+.payment-option strong {
+  font-size: clamp(18px, 1.45vw, 23px);
+}
+
+.parsehub-pricing-grid {
+  gap: 28px;
+}
+
+.parsehub-plan-card,
+.public-plan-card.parsehub-plan-card {
+  min-height: 468px;
+  border-radius: 38px;
+}
+
+.parsehub-plan-band {
+  min-height: 52px;
+  font-size: 10.5px;
+  letter-spacing: 0.22em;
+}
+
+.parsehub-plan-body {
+  padding: 38px;
+}
+
+.parsehub-plan-body h2,
+.parsehub-plan-body h3 {
+  font-size: clamp(23px, 1.65vw, 26px);
+}
+
+.parsehub-plan-body p {
+  min-height: 40px;
+  margin: 13px 0 28px;
+  font-size: 12px;
+  line-height: 1.48;
+}
+
+.parsehub-price {
+  font-size: clamp(34px, 2.7vw, 40px) !important;
+}
+
+.parsehub-plan-body ul {
+  margin: 36px 0 24px;
+}
+
+.parsehub-plan-body li {
+  padding: 13px 0;
+}
+
+.parsehub-plan-button,
+.parsehub-plan-body .primary-button {
+  min-height: 58px;
+  border-radius: 19px;
+}
+
+.parsehub-invoices-card {
+  padding: 36px 38px;
+  border-radius: 38px;
+}
+
+@media (max-width: 1180px) {
+  .parsehub-main {
+    width: min(100% - 32px, 1728px);
+  }
+
+  .billing-subscription-hero {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+
+  .billing-subscription-summary {
+    width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  body {
+    font-size: 13px;
+  }
+
+  .parsehub-shell {
+    padding-top: 96px;
+  }
+
+  .parsehub-main {
+    width: min(100% - 24px, 1728px);
+  }
+
+  .topbar h1,
+  .job-hero-copy h2,
+  .settings-hero h2,
+  .billing-hero h2,
+  .section-heading h2,
+  .auth-card h2,
+  .launcher-card h2,
+  .panel-card h2,
+  .billing-subscription-copy h2 {
+    font-size: clamp(24px, 8vw, 34px);
+  }
+
+  .public-hero h1 {
+    font-size: clamp(38px, 13vw, 54px);
+  }
+
+  .billing-subscription-hero {
+    min-height: 0;
+    margin-bottom: 28px;
+    padding: 28px;
+    border-radius: 30px;
+  }
+
+  .billing-subscription-summary {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    padding: 24px;
+    border-radius: 26px;
+  }
+
+  .billing-summary-metrics {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .billing-summary-metrics > div {
+    padding: 0 0 16px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(11, 99, 246, 0.09);
+  }
+
+  .billing-summary-metrics > div:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+
+  .billing-subscription-summary .status-pill {
+    width: 100%;
+  }
+
+  .parsehub-pricing-grid {
+    gap: 18px;
+  }
+
+  .parsehub-plan-card,
+  .public-plan-card.parsehub-plan-card {
+    min-height: auto;
+    border-radius: 30px;
+  }
+
+  .parsehub-plan-body {
+    padding: 28px;
+  }
+
+  .parsehub-price {
+    font-size: clamp(32px, 12vw, 42px) !important;
+  }
+}
