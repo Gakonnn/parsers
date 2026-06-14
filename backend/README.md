@@ -89,7 +89,6 @@ When a user calls `POST /api/v1/jobs`, the API creates a `parser_jobs` record, e
 Before enqueueing, the backend checks the user's active subscription:
 
 - allowed parser sources
-- monthly job limit
 - monthly reserved records limit
 
 If a user does not have an active subscription, the backend automatically attaches the default `free` plan.

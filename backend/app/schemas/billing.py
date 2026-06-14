@@ -30,7 +30,7 @@ class SubscriptionPlanCreate(BaseModel):
     price_kzt: int = Field(default=0, ge=0)
     currency: str = Field(default="KZT", max_length=8)
     billing_period: str = Field(default="monthly", max_length=32)
-    max_jobs_per_month: int = Field(default=10, ge=-1)
+    max_jobs_per_month: int = Field(default=-1, ge=-1)
     max_records_per_month: int = Field(default=500, ge=-1)
     allowed_sources: list[str] = Field(default_factory=list)
     is_active: bool = True

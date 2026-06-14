@@ -4,16 +4,11 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { PublicPage } from "@/components/public-page";
 import { api } from "@/lib/api";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, formatPerRecordPrice } from "@/lib/format";
 import type { SubscriptionPlan } from "@/lib/types";
 
 function limitText(value: number, unit: string): string {
   return value === -1 ? `Безлимит${unit ? ` ${unit}` : ""}` : `${value}${unit ? ` ${unit}` : ""}`;
-}
-
-function perRecordText(plan: SubscriptionPlan): string {
-  if (plan.max_records_per_month <= 0 || plan.price_kzt <= 0) return formatMoney(0, plan.currency);
-  return formatMoney(Math.ceil(plan.price_kzt / plan.max_records_per_month), plan.currency);
 }
 
 export default function FinancePage() {
@@ -56,9 +51,8 @@ export default function FinancePage() {
               <strong className="parsehub-price">{formatMoney(plan.price_kzt, plan.currency)}</strong>
               <span className="parsehub-price-period">в месяц</span>
               <ul>
-                <li><span>Запусков:</span><strong>{limitText(plan.max_jobs_per_month, "")}</strong></li>
                 <li><span>Записей:</span><strong>{limitText(plan.max_records_per_month, "")}</strong></li>
-                <li><span>Цена за 1 запись:</span><em>{perRecordText(plan)}</em></li>
+                <li><span>Цена за 1 запись:</span><em>{formatPerRecordPrice(plan.price_kzt, plan.max_records_per_month, plan.currency)}</em></li>
               </ul>
               <Link className="primary-button wide" href="/register">
                 Подключить тариф

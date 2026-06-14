@@ -12,16 +12,14 @@ type NavigationItem = {
 };
 
 const publicNavigation: NavigationItem[] = [
-  { href: "/", label: "Обзор" },
-  { href: "/marketing", label: "Парсеры" },
+  { href: "/jobs", label: "Парсеры", aliases: ["/marketing", "/dashboard"] },
   { href: "/structure", label: "Результаты" },
   { href: "/finance", label: "Тарифы" },
   { href: "/profile", label: "Кабинет" },
 ];
 
 const appNavigation: NavigationItem[] = [
-  { href: "/dashboard", label: "Обзор" },
-  { href: "/marketing", label: "Парсеры", aliases: ["/jobs"] },
+  { href: "/jobs", label: "Парсеры", aliases: ["/dashboard", "/marketing"] },
   { href: "/structure", label: "Результаты", aliases: ["/results"] },
   { href: "/billing", label: "Тарифы", aliases: ["/orders", "/cart"] },
   { href: "/profile", label: "Кабинет", aliases: ["/settings"] },
@@ -83,7 +81,7 @@ const socials = [
   },
 ];
 
-export function ParseHubHeader({
+export function DataLeadHubHeader({
   mode = "public",
   notificationsCount = 0,
   onLogout,
@@ -120,7 +118,7 @@ export function ParseHubHeader({
     <>
       <header className={`parsehub-header${isScrolled ? " is-scrolled" : ""}`}>
         <div className="parsehub-header-inner">
-          <Link className="parsehub-brand" href={mode === "app" ? "/dashboard" : "/"} aria-label="ParseHub">
+          <Link className="parsehub-brand" href={mode === "app" ? "/jobs" : "/"} aria-label="DataLeadHub">
             <span
               className="parsehub-logo-wrap"
               onMouseEnter={() => setIsLogoZoomed(true)}
@@ -130,7 +128,7 @@ export function ParseHubHeader({
             >
               <img src="/logo/logo.png" alt="" />
             </span>
-            <strong>ParseHub</strong>
+            <strong>DataLeadHub</strong>
           </Link>
 
           <nav className="parsehub-nav" aria-label={mode === "app" ? "Основная навигация" : "Публичная навигация"}>
@@ -273,12 +271,12 @@ function MobileNavIcon({ label }: { label: string }) {
   );
 }
 
-export function ParseHubFooter() {
+export function DataLeadHubFooter() {
   const [form, setForm] = useState({ name: "", email: "", phone: "", question: "" });
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const subject = encodeURIComponent("Вопрос в поддержку ParseHub");
+    const subject = encodeURIComponent("Вопрос в поддержку DataLeadHub");
     const body = encodeURIComponent(
       [
         `Имя или логин: ${form.name}`,
@@ -288,7 +286,7 @@ export function ParseHubFooter() {
         form.question,
       ].join("\n"),
     );
-    window.location.href = `mailto:support@parsehub.kz?subject=${subject}&body=${body}`;
+    window.location.href = `mailto:support@dataleadhub.kz?subject=${subject}&body=${body}`;
   }
 
   const canSubmit = useMemo(() => Boolean(form.name.trim() && form.email.trim() && form.question.trim()), [form]);
@@ -317,7 +315,7 @@ export function ParseHubFooter() {
         </div>
 
         <div className="parsehub-footer-column parsehub-footer-support">
-          <h3>Служба поддержки ParseHub</h3>
+          <h3>Служба поддержки DataLeadHub</h3>
           <form onSubmit={submit}>
             <input
               onChange={(event) => setForm((value) => ({ ...value, name: event.target.value }))}
@@ -354,8 +352,8 @@ export function ParseHubFooter() {
       </div>
 
       <div className="parsehub-footer-bottom">
-        <p>ParseHub Data Solutions</p>
-        <span>2026 © Все права защищены ParseHub</span>
+        <p>DataLeadHub Data Solutions</p>
+        <span>2026 © Все права защищены DataLeadHub</span>
       </div>
     </footer>
   );

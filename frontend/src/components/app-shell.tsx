@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
-import { ParseHubFooter, ParseHubHeader } from "@/components/parsehub-chrome";
+import { DataLeadHubFooter, DataLeadHubHeader } from "@/components/parsehub-chrome";
 import { api, clearToken, getToken } from "@/lib/api";
 import type { NotificationList, User } from "@/lib/types";
 
@@ -56,7 +56,7 @@ export function AppShell({ children, eyebrow, title, actions }: { children: Reac
 
   return (
     <div className="parsehub-shell">
-      <ParseHubHeader
+      <DataLeadHubHeader
         mode="app"
         notificationsCount={notifications?.unread_total || 0}
         onLogout={() => {
@@ -76,7 +76,7 @@ export function AppShell({ children, eyebrow, title, actions }: { children: Reac
         {!ready ? <div className="loading-card">Подключаем кабинет...</div> : children}
       </main>
 
-      <ParseHubFooter />
+      <DataLeadHubFooter />
     </div>
   );
 }

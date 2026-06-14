@@ -20,7 +20,7 @@ export default function AboutPage() {
     <PublicPage
       eyebrow="О платформе"
       title="Больше чем один парсер"
-      description="ParseHub объединяет запуск парсеров, хранение результатов, тарифы, выгрузки и администрирование в едином рабочем кабинете."
+      description="DataLeadHub объединяет запуск парсеров, хранение результатов, тарифы, выгрузки и администрирование в едином рабочем кабинете."
     >
       <section className="public-card-grid">
         {values.map((item) => (

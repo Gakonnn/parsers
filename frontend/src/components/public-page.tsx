@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ParseHubFooter, ParseHubHeader } from "@/components/parsehub-chrome";
+import { DataLeadHubFooter, DataLeadHubHeader } from "@/components/parsehub-chrome";
 
 export function PublicPage({
   eyebrow,
@@ -14,7 +14,7 @@ export function PublicPage({
 }) {
   return (
     <div className="parsehub-shell parsehub-public-shell">
-      <ParseHubHeader mode="public" />
+      <DataLeadHubHeader mode="public" />
       <main className="public-page parsehub-main">
         <section className="public-hero">
           <span className="eyebrow">{eyebrow}</span>
@@ -24,7 +24,7 @@ export function PublicPage({
 
         {children}
       </main>
-      <ParseHubFooter />
+      <DataLeadHubFooter />
     </div>
   );
 }

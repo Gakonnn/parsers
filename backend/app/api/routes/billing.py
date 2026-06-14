@@ -79,7 +79,7 @@ def read_my_usage(db: Session = Depends(get_db), current_user: User = Depends(ge
         subscription=UserSubscriptionPublic.model_validate(subscription),
         jobs_used=jobs_used,
         records_used=records_used,
-        jobs_remaining=max(-1, plan.max_jobs_per_month - jobs_used),
+        jobs_remaining=-1,
         records_remaining=max(-1, plan.max_records_per_month - records_used),
         month_started_at=current_month_start(),
     )

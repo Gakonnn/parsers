@@ -55,6 +55,12 @@ def get_or_create_free_plan(db: Session) -> SubscriptionPlan:
     plan = db.scalar(select(SubscriptionPlan).where(SubscriptionPlan.code == FREE_PLAN_CODE))
     if plan is not None:
         changed = False
+        if plan.name != "Бесплатный":
+            plan.name = "Бесплатный"
+            changed = True
+        if plan.description != "Бесплатный тариф для первых 50 записей":
+            plan.description = "Бесплатный тариф для первых 50 записей"
+            changed = True
         if plan.max_jobs_per_month != settings.free_plan_jobs_per_month:
             plan.max_jobs_per_month = settings.free_plan_jobs_per_month
             changed = True
@@ -70,8 +76,8 @@ def get_or_create_free_plan(db: Session) -> SubscriptionPlan:
 
     plan = SubscriptionPlan(
         code=FREE_PLAN_CODE,
-        name="Базовый",
-        description="Базовый тариф для новых пользователей",
+        name="Бесплатный",
+        description="Бесплатный тариф для первых 50 записей",
         price_kzt=0,
         max_jobs_per_month=settings.free_plan_jobs_per_month,
         max_records_per_month=settings.free_plan_records_per_month,
@@ -150,11 +156,6 @@ def ensure_job_quota(db: Session, user: User, source: str, parameters: dict[str,
     jobs_used, records_used = get_monthly_usage(db, user)
 
     if user.role != UserRole.ADMIN.value:
-        if plan.max_jobs_per_month >= 0 and jobs_used + 1 > plan.max_jobs_per_month:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Monthly parser job limit exceeded",
-            )
         if plan.max_records_per_month >= 0 and records_used + requested_records > plan.max_records_per_month:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -167,7 +168,7 @@ def ensure_job_quota(db: Session, user: User, source: str, parameters: dict[str,
         requested_records=requested_records,
         jobs_used=jobs_used,
         records_used=records_used,
-        jobs_remaining=max(-1, plan.max_jobs_per_month - jobs_used),
+        jobs_remaining=-1,
         records_remaining=max(-1, plan.max_records_per_month - records_used),
     )
 

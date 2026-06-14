@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ParseHub - Платформа автоматизации данных",
-  description: "Эффективные решения для сбора, управления и выгрузки данных ParseHub.",
+  title: "DataLeadHub - Платформа автоматизации данных",
+  description: "Эффективные решения для сбора, управления и выгрузки данных DataLeadHub.",
   icons: {
     icon: "/favicon.ico",
     shortcut: "/favicon.ico",

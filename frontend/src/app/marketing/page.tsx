@@ -1,1 +1,5 @@
-export { default } from "../jobs/page";
+import { redirect } from "next/navigation";
+
+export default function MarketingPage() {
+  redirect("/jobs");
+}

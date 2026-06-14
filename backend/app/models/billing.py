@@ -45,7 +45,7 @@ class SubscriptionPlan(Base):
     price_kzt: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     currency: Mapped[str] = mapped_column(String(8), nullable=False, default="KZT")
     billing_period: Mapped[str] = mapped_column(String(32), nullable=False, default="monthly")
-    max_jobs_per_month: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    max_jobs_per_month: Mapped[int] = mapped_column(Integer, nullable=False, default=-1)
     max_records_per_month: Mapped[int] = mapped_column(Integer, nullable=False, default=500)
     allowed_sources: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

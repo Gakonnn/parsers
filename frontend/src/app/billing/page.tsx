@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { StatusPill } from "@/components/status-pill";
 import { api } from "@/lib/api";
-import { formatDate, formatMoney } from "@/lib/format";
+import { formatDate, formatMoney, formatPerRecordPrice } from "@/lib/format";
 import type { Invoice, PaymentProviderInfo, SubscriptionPlan, UsageSummary } from "@/lib/types";
 
 type PaymentMethod = "kaspi_qr" | "manual";
@@ -21,11 +21,6 @@ type KaspiQrMetadata = {
 
 function limitLabel(value: number, suffix: string): string {
   return value === -1 ? "Безлимит" : `${value}${suffix ? ` ${suffix}` : ""}`;
-}
-
-function perRecordLabel(plan: SubscriptionPlan): string {
-  if (plan.max_records_per_month <= 0 || plan.price_kzt <= 0) return formatMoney(0, plan.currency);
-  return formatMoney(Math.ceil(plan.price_kzt / plan.max_records_per_month), plan.currency);
 }
 
 function kaspiMeta(invoice: Invoice | null): KaspiQrMetadata {
@@ -153,7 +148,7 @@ export default function BillingPage() {
         <div>
           <span className="eyebrow">Текущий тариф</span>
           <h2>{usage?.subscription.plan.name || "—"}</h2>
-          <p>{usage?.jobs_used ?? 0} запусков и {usage?.records_used ?? 0} записей использовано в этом месяце.</p>
+          <p>{usage?.records_used ?? 0} записей использовано в этом месяце.</p>
         </div>
         <StatusPill status={usage?.subscription.status || "active"} />
       </section>
@@ -225,9 +220,8 @@ export default function BillingPage() {
               <strong className="parsehub-price">{formatMoney(plan.price_kzt, plan.currency)}</strong>
               <span className="parsehub-price-period">в месяц</span>
               <ul>
-                <li><span>Запусков:</span><strong>{limitLabel(plan.max_jobs_per_month, "")}</strong></li>
                 <li><span>Записей:</span><strong>{limitLabel(plan.max_records_per_month, "")}</strong></li>
-                <li><span>Цена за 1 запись:</span><em>{perRecordLabel(plan)}</em></li>
+                <li><span>Цена за 1 запись:</span><em>{formatPerRecordPrice(plan.price_kzt, plan.max_records_per_month, plan.currency)}</em></li>
               </ul>
               <button
                 className="primary-button wide parsehub-plan-button"

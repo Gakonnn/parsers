@@ -156,7 +156,6 @@ export const api = {
     price_kzt: number;
     currency: string;
     billing_period: string;
-    max_jobs_per_month: number;
     max_records_per_month: number;
     allowed_sources: string[];
     is_active: boolean;

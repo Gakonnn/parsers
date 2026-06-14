@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ParseHubFooter, ParseHubHeader } from "@/components/parsehub-chrome";
+import { DataLeadHubFooter, DataLeadHubHeader } from "@/components/parsehub-chrome";
 import { getToken } from "@/lib/api";
 
 type AuthState = "checking" | "guest" | "user";
@@ -15,7 +15,7 @@ export default function HomePage() {
   useEffect(() => {
     if (getToken()) {
       setAuthState("user");
-      router.replace("/dashboard");
+      router.replace("/jobs");
       return;
     }
     setAuthState("guest");
@@ -23,19 +23,19 @@ export default function HomePage() {
 
   return (
     <div className="parsehub-shell parsehub-public-shell">
-      <ParseHubHeader mode="public" />
+      <DataLeadHubHeader mode="public" />
 
       <main className="parsehub-main">
         {authState === "checking" || authState === "user" ? (
           <section className="panel-card parsehub-guest-hero">
-            <span className="eyebrow">ParseHub Platform</span>
+            <span className="eyebrow">DataLeadHub Platform</span>
             <h1>Открываем рабочий кабинет</h1>
             <p>Если вы уже вошли в систему, мы перенаправим вас на страницу запуска парсеров.</p>
           </section>
         ) : (
           <>
             <section className="panel-card parsehub-guest-hero">
-              <span className="eyebrow">ParseHub Platform</span>
+              <span className="eyebrow">DataLeadHub Platform</span>
               <h1>Парсеры запускаются только из личного кабинета</h1>
               <p>
                 Персональные задачи, лимиты, результаты и выгрузки доступны после входа.
@@ -68,7 +68,7 @@ export default function HomePage() {
         )}
       </main>
 
-      <ParseHubFooter />
+      <DataLeadHubFooter />
     </div>
   );
 }

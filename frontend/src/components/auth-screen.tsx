@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
-import { ParseHubFooter, ParseHubHeader } from "@/components/parsehub-chrome";
+import { DataLeadHubFooter, DataLeadHubHeader } from "@/components/parsehub-chrome";
 import { api, getToken, setToken } from "@/lib/api";
 
 export function AuthScreen({ mode }: { mode: "login" | "register" }) {
@@ -17,7 +17,7 @@ export function AuthScreen({ mode }: { mode: "login" | "register" }) {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    if (getToken()) router.replace("/dashboard");
+    if (getToken()) router.replace("/jobs");
   }, [router]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -35,7 +35,7 @@ export function AuthScreen({ mode }: { mode: "login" | "register" }) {
     try {
       const response = isRegister ? await api.register(email, password, "") : await api.login(email, password);
       setToken(response.access_token);
-      router.replace("/dashboard");
+      router.replace("/jobs");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Не удалось выполнить запрос.");
     } finally {
@@ -45,7 +45,7 @@ export function AuthScreen({ mode }: { mode: "login" | "register" }) {
 
   return (
     <div className="parsehub-shell parsehub-public-shell">
-      <ParseHubHeader mode="public" />
+      <DataLeadHubHeader mode="public" />
 
       <main className="parsehub-auth-main">
         <section className="parsehub-auth-card">
@@ -54,7 +54,7 @@ export function AuthScreen({ mode }: { mode: "login" | "register" }) {
           </div>
           <div className="parsehub-auth-copy">
             <h1>{isRegister ? "Регистрация" : "Вход"}</h1>
-            <p>{isRegister ? "Присоединяйтесь к ParseHub" : "ParseHub Data Studio"}</p>
+            <p>{isRegister ? "Присоединяйтесь к DataLeadHub" : "DataLeadHub Data Studio"}</p>
           </div>
           <form onSubmit={submit} className="parsehub-auth-form">
             <label className="field-block">
@@ -101,7 +101,7 @@ export function AuthScreen({ mode }: { mode: "login" | "register" }) {
         </section>
       </main>
 
-      <ParseHubFooter />
+      <DataLeadHubFooter />
     </div>
   );
 }

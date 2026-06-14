@@ -20,6 +20,16 @@ export function formatMoney(value: number, currency = "KZT"): string {
   }).format(value || 0);
 }
 
+export function formatPerRecordPrice(price: number, records: number, currency = "KZT"): string {
+  if (records <= 0 || price <= 0) return formatMoney(0, currency);
+  const value = price / records;
+  return new Intl.NumberFormat("ru-KZ", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: Number.isInteger(value) ? 0 : 2,
+  }).format(value);
+}
+
 export function percent(current: number, total: number): number {
   if (!total || total <= 0) return current > 0 ? 12 : 0;
   return Math.max(0, Math.min(100, Math.round((current / total) * 100)));

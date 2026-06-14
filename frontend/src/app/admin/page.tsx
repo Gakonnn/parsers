@@ -15,7 +15,6 @@ type PlanForm = {
   name: string;
   description: string;
   price_kzt: number;
-  max_jobs_per_month: number;
   max_records_per_month: number;
   allowed_sources: string[];
   is_public: boolean;
@@ -25,9 +24,8 @@ const initialPlanForm: PlanForm = {
   code: "business",
   name: "Business",
   description: "Коммерческий тариф для регулярного парсинга и выгрузок.",
-  price_kzt: 49000,
-  max_jobs_per_month: 200,
-  max_records_per_month: 50000,
+  price_kzt: 25000,
+  max_records_per_month: 10000,
   allowed_sources: ["olx", "krisha", "2gis"],
   is_public: true,
 };
@@ -85,7 +83,6 @@ export default function AdminPage() {
         price_kzt: Number(planForm.price_kzt) || 0,
         currency: "KZT",
         billing_period: "monthly",
-        max_jobs_per_month: Number(planForm.max_jobs_per_month),
         max_records_per_month: Number(planForm.max_records_per_month),
         allowed_sources: planForm.allowed_sources,
         is_active: true,
@@ -227,9 +224,8 @@ export default function AdminPage() {
             <label className="field-block compact"><span>Описание</span><input value={planForm.description} onChange={(event) => setPlanField("description", event.target.value)} /></label>
             <div className="form-grid two equal">
               <label className="field-block compact"><span>Цена KZT</span><input min={0} type="number" value={planForm.price_kzt} onChange={(event) => setPlanField("price_kzt", Number(event.target.value))} /></label>
-              <label className="field-block compact"><span>Запусков / месяц</span><input min={-1} type="number" value={planForm.max_jobs_per_month} onChange={(event) => setPlanField("max_jobs_per_month", Number(event.target.value))} /></label>
+              <label className="field-block compact"><span>Записей / месяц</span><input min={-1} type="number" value={planForm.max_records_per_month} onChange={(event) => setPlanField("max_records_per_month", Number(event.target.value))} /></label>
             </div>
-            <label className="field-block compact"><span>Записей / месяц</span><input min={-1} type="number" value={planForm.max_records_per_month} onChange={(event) => setPlanField("max_records_per_month", Number(event.target.value))} /></label>
             <div className="source-checkboxes">
               {sourceOptions.map((source) => (
                 <label key={source}>
@@ -265,7 +261,7 @@ export default function AdminPage() {
                   <strong>{plan.name}</strong>
                   <span>{plan.code} · {formatMoney(plan.price_kzt, plan.currency)}</span>
                 </div>
-                <small>{plan.max_jobs_per_month} запусков · {plan.max_records_per_month} записей · {plan.allowed_sources.join(", ") || "all"}</small>
+                <small>{plan.max_records_per_month} записей · {plan.allowed_sources.join(", ") || "all"}</small>
                 <div className="button-row">
                   <button className="ghost-button" disabled={busy === `plan-${plan.id}`} type="button" onClick={() => togglePlan(plan, "is_active").catch(() => undefined)}>{plan.is_active ? "Отключить" : "Включить"}</button>
                   <button className="ghost-button" disabled={busy === `plan-${plan.id}`} type="button" onClick={() => togglePlan(plan, "is_public").catch(() => undefined)}>{plan.is_public ? "Скрыть" : "Опубликовать"}</button>

@@ -108,8 +108,8 @@ export default function SettingsPage() {
             <strong>{currentPlan?.name || "—"}</strong>
           </div>
           <div>
-            <span>Запуски / записи</span>
-            <strong>{usage?.jobs_used ?? 0} / {usage?.records_used ?? 0}</strong>
+            <span>Использовано записей</span>
+            <strong>{usage?.records_used ?? 0}</strong>
           </div>
         </div>
       </section>
@@ -211,12 +211,8 @@ export default function SettingsPage() {
           )}
           <div className="settings-footnote">
             <div>
-              <span>Текущий лимит</span>
+              <span>Стоимость тарифа</span>
               <strong>{formatMoney(currentPlan?.price_kzt || 0, currentPlan?.currency || "KZT")}</strong>
-            </div>
-            <div>
-              <span>Осталось запусков</span>
-              <strong>{usage?.jobs_remaining ?? 0}</strong>
             </div>
             <div>
               <span>Осталось записей</span>

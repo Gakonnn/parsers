@@ -1,4 +1,4 @@
-# ParserDesk Frontend
+# DataLeadHub Frontend
 
 Next.js + TypeScript cabinet for the multi-user parsers platform.
 
@@ -19,8 +19,7 @@ http://localhost:3000
 ## Pages
 
 - `/` - login and registration
-- `/dashboard` - main control room with usage and recent jobs
-- `/jobs` - parser launcher and job history
+- `/jobs` - main parser launcher, queue, and job history
 - `/results` - database records and CSV/XLSX/JSON export
 - `/billing` - plans, invoices, and payment flow placeholder
 - `/notifications` - in-app notifications
