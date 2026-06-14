@@ -5075,3 +5075,72 @@ body {
     font-size: clamp(32px, 12vw, 42px) !important;
   }
 }
+
+/* Public pages should keep the calmer ParseHubFront scale too */
+.parsehub-guest-hero,
+.public-hero {
+  padding: clamp(34px, 4.2vw, 56px);
+  border-radius: 38px;
+}
+
+.parsehub-guest-hero {
+  gap: 18px;
+  margin-bottom: 32px;
+}
+
+.parsehub-guest-hero h1,
+.public-hero h1 {
+  max-width: 760px;
+  font-size: clamp(38px, 4.6vw, 64px);
+  font-weight: 700;
+  line-height: 0.95;
+  letter-spacing: -0.07em;
+}
+
+.parsehub-guest-hero p,
+.public-hero p {
+  max-width: 640px;
+  font-size: clamp(14px, 1.35vw, 17px);
+  line-height: 1.55;
+}
+
+.parsehub-guest-actions {
+  margin-top: 4px;
+}
+
+.parsehub-guest-actions .parsehub-login-link,
+.parsehub-guest-actions .parsehub-register-link {
+  min-height: 50px;
+}
+
+.public-hero {
+  min-height: 0;
+  margin-bottom: 26px;
+}
+
+.public-card h2,
+.public-section h2 {
+  font-size: clamp(24px, 2.2vw, 34px);
+}
+
+.public-section-content p {
+  font-size: 14px;
+}
+
+@media (max-width: 720px) {
+  .parsehub-guest-hero,
+  .public-hero {
+    padding: 28px;
+    border-radius: 28px;
+  }
+
+  .parsehub-guest-hero h1,
+  .public-hero h1 {
+    font-size: clamp(32px, 10vw, 42px);
+  }
+
+  .parsehub-guest-hero p,
+  .public-hero p {
+    font-size: 14px;
+  }
+}
