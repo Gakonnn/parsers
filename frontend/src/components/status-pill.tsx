@@ -9,6 +9,9 @@ const labels: Record<string, string> = {
   active: "Активен",
   paid: "Оплачен",
   pending_invoice: "Ожидает",
+  new: "Новое",
+  in_progress: "В работе",
+  closed: "Закрыто",
 };
 
 export function StatusPill({ status }: { status: JobStatus | string }) {

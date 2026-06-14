@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { api } from "@/lib/api";
 
 type HeaderMode = "public" | "app";
 type NavigationItem = {
@@ -273,23 +274,34 @@ function MobileNavIcon({ label }: { label: string }) {
 
 export function DataLeadHubFooter() {
   const [form, setForm] = useState({ name: "", email: "", phone: "", question: "" });
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const subject = encodeURIComponent("Вопрос в поддержку DataLeadHub");
-    const body = encodeURIComponent(
-      [
-        `Имя или логин: ${form.name}`,
-        `Email: ${form.email}`,
-        `Телефон: ${form.phone || "-"}`,
-        "",
-        form.question,
-      ].join("\n"),
-    );
-    window.location.href = `mailto:support@dataleadhub.kz?subject=${subject}&body=${body}`;
+    setBusy(true);
+    setNotice(null);
+    try {
+      await api.createSupportMessage({
+        name: form.name.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim(),
+        message: form.question.trim(),
+        source: "footer",
+      });
+      setForm({ name: "", email: "", phone: "", question: "" });
+      setNotice({ type: "success", text: "Обращение отправлено. Администратор увидит его в панели." });
+    } catch (error) {
+      setNotice({
+        type: "error",
+        text: error instanceof Error ? error.message : "Не удалось отправить обращение.",
+      });
+    } finally {
+      setBusy(false);
+    }
   }
 
-  const canSubmit = useMemo(() => Boolean(form.name.trim() && form.email.trim() && form.question.trim()), [form]);
+  const canSubmit = useMemo(() => Boolean(form.name.trim() && form.email.trim() && form.question.trim() && !busy), [busy, form]);
 
   return (
     <footer className="parsehub-footer">
@@ -345,8 +357,9 @@ export function DataLeadHubFooter() {
               <Icon>
                 <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.8" />
               </Icon>
-              Отправить
+              {busy ? "Отправляем" : "Отправить"}
             </button>
+            {notice ? <p className={`parsehub-footer-notice ${notice.type}`}>{notice.text}</p> : null}
           </form>
         </div>
       </div>

@@ -9,6 +9,7 @@ import type {
   ParserResult,
   ParserSource,
   SubscriptionPlan,
+  SupportMessage,
   OlxCategoriesTree,
   TwoGisCitiesTree,
   TwoGisRubricsTree,
@@ -107,6 +108,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  createSupportMessage: (payload: { name: string; email: string; phone?: string; message: string; source?: string }) =>
+    apiRequest<SupportMessage>("/support/messages", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   jobs: (allUsers = false) => apiRequest<ListResponse<ParserJob>>(`/jobs?limit=80&all_users=${allUsers ? "true" : "false"}`),
   job: (jobId: string) => apiRequest<ParserJob>(`/jobs/${jobId}`),
   jobLive: (jobId: string) => apiRequest<ParserJobLive>(`/jobs/${jobId}/live`),
@@ -148,6 +154,12 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   adminAudit: () => apiRequest<ListResponse<AuditLog>>("/admin/audit-logs?limit=40"),
+  adminSupportMessages: () => apiRequest<ListResponse<SupportMessage>>("/admin/support-messages?limit=40"),
+  adminUpdateSupportMessage: (messageId: string, status: string) =>
+    apiRequest<SupportMessage>(`/admin/support-messages/${messageId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
   adminPlans: () => apiRequest<SubscriptionPlan[]>("/billing/admin/plans"),
   adminCreatePlan: (payload: {
     code: string;

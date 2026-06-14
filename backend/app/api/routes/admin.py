@@ -9,17 +9,19 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_admin
 from app.db.session import get_db
 from app.models.parser_job import ParserJob
-from app.models.system import AuditLog
+from app.models.system import AuditLog, SupportMessage
 from app.models.user import User, UserRole
 from app.schemas.billing import UsageSummary, UserSubscriptionPublic
 from app.schemas.job import ParserJobListResponse
-from app.schemas.system import AuditLogListResponse
+from app.schemas.system import AuditLogListResponse, SupportMessageListResponse, SupportMessagePublic, SupportMessageUpdate
 from app.schemas.user import UserAdminUpdate, UserListResponse, UserPublic
 from app.services.audit import log_event, notify_user
 from app.services.quota import current_month_start, get_monthly_usage, get_or_create_active_subscription
 
 
 router = APIRouter()
+
+SUPPORT_STATUSES = {"new", "in_progress", "closed"}
 
 
 @router.get("/users", response_model=UserListResponse)
@@ -199,3 +201,70 @@ def list_audit_logs(
         items=list(db.scalars(statement).all()),
         total=db.scalar(count_statement) or 0,
     )
+
+
+@router.get("/support-messages", response_model=SupportMessageListResponse)
+def list_support_messages(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+    q: str = Query(default="", max_length=255),
+    status_filter: str = Query(default="", alias="status", max_length=32),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> SupportMessageListResponse:
+    statement = select(SupportMessage).order_by(SupportMessage.created_at.desc()).limit(limit).offset(offset)
+    count_statement = select(func.count()).select_from(SupportMessage)
+
+    conditions = []
+    search = q.strip()
+    if search:
+        pattern = f"%{search}%"
+        conditions.append(
+            or_(
+                SupportMessage.name.ilike(pattern),
+                SupportMessage.email.ilike(pattern),
+                SupportMessage.phone.ilike(pattern),
+                SupportMessage.message.ilike(pattern),
+            )
+        )
+    if status_filter.strip():
+        conditions.append(SupportMessage.status == status_filter.strip())
+
+    for condition in conditions:
+        statement = statement.where(condition)
+        count_statement = count_statement.where(condition)
+
+    return SupportMessageListResponse(
+        items=list(db.scalars(statement).all()),
+        total=db.scalar(count_statement) or 0,
+    )
+
+
+@router.patch("/support-messages/{message_id}", response_model=SupportMessagePublic)
+def update_support_message(
+    message_id: UUID,
+    payload: SupportMessageUpdate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(require_admin),
+) -> SupportMessage:
+    item = db.scalar(select(SupportMessage).where(SupportMessage.id == message_id))
+    if item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Support message not found")
+    next_status = payload.status.strip()
+    if next_status not in SUPPORT_STATUSES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid support message status")
+
+    previous_status = item.status
+    item.status = next_status
+    log_event(
+        db,
+        event_type="support.message_updated",
+        actor_user=current_admin,
+        entity_type="support_message",
+        entity_id=item.id,
+        message="Support message status updated by admin",
+        payload={"from": previous_status, "to": next_status},
+    )
+    db.commit()
+    db.refresh(item)
+    return item

@@ -1461,6 +1461,74 @@ button:disabled {
 
 .admin-message { margin-bottom: 14px; }
 
+.admin-support-panel {
+  margin-bottom: 18px;
+}
+
+.admin-support-list {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-support-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid transparent;
+  border-radius: 22px;
+  background: rgba(255, 250, 242, 0.66);
+  box-shadow: var(--shadow-border);
+}
+
+.admin-support-main,
+.admin-support-footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.admin-support-main div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.admin-support-main strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.02em;
+}
+
+.admin-support-main span,
+.admin-support-footer small {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.admin-support-card p {
+  margin: 0;
+  color: var(--ink);
+  line-height: 1.55;
+  text-wrap: pretty;
+  white-space: pre-wrap;
+}
+
+.status-new {
+  color: var(--warning);
+  background: rgba(191, 132, 41, 0.14);
+}
+
+.status-in_progress {
+  color: #0b63f6;
+  background: rgba(11, 99, 246, 0.12);
+}
+
+.status-closed {
+  color: var(--success);
+  background: rgba(77, 118, 69, 0.13);
+}
+
 .admin-control-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(360px, 0.7fr);
@@ -4252,6 +4320,26 @@ body {
   cursor: not-allowed;
   opacity: 0.56;
   transform: none;
+}
+
+.parsehub-footer-notice {
+  margin: 0;
+  border-radius: 16px;
+  padding: 12px 14px;
+  color: rgba(255, 255, 255, 0.86);
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.parsehub-footer-notice.success {
+  color: #d9ffe8;
+  background: rgba(34, 197, 94, 0.16);
+}
+
+.parsehub-footer-notice.error {
+  color: #ffe1e1;
+  background: rgba(239, 68, 68, 0.16);
 }
 
 .parsehub-footer-bottom {

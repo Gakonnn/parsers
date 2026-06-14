@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/empty-state";
 import { StatusPill } from "@/components/status-pill";
 import { api } from "@/lib/api";
 import { formatDate, formatMoney, truncateMiddle } from "@/lib/format";
-import type { AuditLog, Invoice, SubscriptionPlan, User } from "@/lib/types";
+import type { AuditLog, Invoice, SubscriptionPlan, SupportMessage, User } from "@/lib/types";
 
 const sourceOptions = ["olx", "krisha", "2gis"];
 
@@ -35,6 +35,7 @@ export default function AdminPage() {
   const [audit, setAudit] = useState<AuditLog[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [supportMessages, setSupportMessages] = useState<SupportMessage[]>([]);
   const [selectedPlanByUser, setSelectedPlanByUser] = useState<Record<string, string>>({});
   const [planForm, setPlanForm] = useState<PlanForm>(initialPlanForm);
   const [error, setError] = useState("");
@@ -44,16 +45,18 @@ export default function AdminPage() {
   const usersById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
 
   async function load() {
-    const [usersResponse, auditResponse, invoiceResponse, planResponse] = await Promise.all([
+    const [usersResponse, auditResponse, invoiceResponse, planResponse, supportResponse] = await Promise.all([
       api.adminUsers(),
       api.adminAudit(),
       api.adminInvoices(),
       api.adminPlans(),
+      api.adminSupportMessages(),
     ]);
     setUsers(usersResponse.items);
     setAudit(auditResponse.items);
     setInvoices(invoiceResponse.items);
     setPlans(planResponse);
+    setSupportMessages(supportResponse.items);
     setSelectedPlanByUser((current) => {
       const next = { ...current };
       usersResponse.items.forEach((user) => {
@@ -156,6 +159,20 @@ export default function AdminPage() {
     }
   }
 
+  async function updateSupportMessage(item: SupportMessage, status: "new" | "in_progress" | "closed") {
+    setBusy(`support-${item.id}`);
+    setMessage("");
+    try {
+      await api.adminUpdateSupportMessage(item.id, status);
+      setMessage("Статус обращения обновлен.");
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Не удалось обновить обращение");
+    } finally {
+      setBusy("");
+    }
+  }
+
   if (error) {
     return (
       <AppShell eyebrow="Администрирование" title="Админ-панель">
@@ -169,6 +186,39 @@ export default function AdminPage() {
   return (
     <AppShell eyebrow="Администрирование" title="Админ-панель">
       {message ? <div className={message.includes("Не удалось") ? "form-message error admin-message" : "form-message admin-message"}>{message}</div> : null}
+
+      <section className="panel-card admin-support-panel">
+        <div className="section-heading horizontal">
+          <div><span className="eyebrow">Поддержка</span><h2>Обращения с сайта</h2></div>
+          <button className="ghost-button" type="button" onClick={() => load().catch(() => undefined)}>Обновить</button>
+        </div>
+        {supportMessages.length ? (
+          <div className="admin-support-list">
+            {supportMessages.map((item) => (
+              <article className="admin-support-card" key={item.id}>
+                <div className="admin-support-main">
+                  <div>
+                    <strong>{item.name}</strong>
+                    <span>{item.email}{item.phone ? ` · ${item.phone}` : ""}</span>
+                  </div>
+                  <StatusPill status={item.status} />
+                </div>
+                <p>{item.message}</p>
+                <div className="admin-support-footer">
+                  <small>{formatDate(item.created_at)} · {item.source}</small>
+                  <div className="button-row">
+                    <button className="ghost-button small-button" disabled={busy === `support-${item.id}` || item.status === "new"} type="button" onClick={() => updateSupportMessage(item, "new").catch(() => undefined)}>Новое</button>
+                    <button className="ghost-button small-button" disabled={busy === `support-${item.id}` || item.status === "in_progress"} type="button" onClick={() => updateSupportMessage(item, "in_progress").catch(() => undefined)}>В работе</button>
+                    <button className="ghost-button small-button" disabled={busy === `support-${item.id}` || item.status === "closed"} type="button" onClick={() => updateSupportMessage(item, "closed").catch(() => undefined)}>Закрыто</button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="Обращений пока нет" text="Сообщения из формы поддержки появятся здесь." />
+        )}
+      </section>
 
       <section className="admin-control-grid">
         <div className="panel-card admin-users-panel">

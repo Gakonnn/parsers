@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class AuditLogPublic(BaseModel):
@@ -50,3 +50,34 @@ class NotificationListResponse(BaseModel):
 
 class BulkUpdateResponse(BaseModel):
     updated: int
+
+
+class SupportMessageCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    email: str = Field(min_length=3, max_length=255)
+    phone: str | None = Field(default=None, max_length=64)
+    message: str = Field(min_length=1, max_length=5000)
+    source: str = Field(default="footer", max_length=64)
+
+
+class SupportMessageUpdate(BaseModel):
+    status: str = Field(min_length=1, max_length=32)
+
+
+class SupportMessagePublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    email: str
+    phone: str | None = None
+    message: str
+    status: str
+    source: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class SupportMessageListResponse(BaseModel):
+    items: list[SupportMessagePublic]
+    total: int

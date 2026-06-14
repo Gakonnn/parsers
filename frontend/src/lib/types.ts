@@ -166,6 +166,18 @@ export type AuditLog = {
   created_at: string;
 };
 
+export type SupportMessage = {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string | null;
+  message: string;
+  status: "new" | "in_progress" | "closed" | string;
+  source: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type PaymentProviderInfo = {
   provider_name: string;
   checkout_mode: string;
