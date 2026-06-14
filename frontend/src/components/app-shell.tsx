@@ -57,6 +57,7 @@ export function AppShell({ children, eyebrow, title, actions }: { children: Reac
   return (
     <div className="parsehub-shell">
       <DataLeadHubHeader
+        isAdmin={user?.role === "admin"}
         mode="app"
         notificationsCount={notifications?.unread_total || 0}
         onLogout={() => {

@@ -83,10 +83,12 @@ const socials = [
 ];
 
 export function DataLeadHubHeader({
+  isAdmin = false,
   mode = "public",
   notificationsCount = 0,
   onLogout,
 }: {
+  isAdmin?: boolean;
   mode?: HeaderMode;
   notificationsCount?: number;
   onLogout?: () => void;
@@ -95,7 +97,10 @@ export function DataLeadHubHeader({
   const [isScrolled, setIsScrolled] = useState(false);
   const [isLogoZoomed, setIsLogoZoomed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const navigation = mode === "app" ? appNavigation : publicNavigation;
+  const navigation = useMemo(() => {
+    if (mode !== "app") return publicNavigation;
+    return isAdmin ? [...appNavigation, { href: "/admin", label: "Админка" }] : appNavigation;
+  }, [isAdmin, mode]);
 
   useEffect(() => {
     const update = () => setIsScrolled(window.scrollY > 10);
@@ -262,6 +267,13 @@ function MobileNavIcon({ label }: { label: string }) {
     return (
       <svg aria-hidden="true" viewBox="0 0 24 24">
         <path d="M5 7h14v10H5V7Zm2.5 3h3m5 4h.01M9 14h.01" />
+      </svg>
+    );
+  }
+  if (normalized.includes("админ")) {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d="M12 3 19 6v5.2c0 4.2-2.8 7.4-7 9.8-4.2-2.4-7-5.6-7-9.8V6l7-3Zm-2.5 8.7 1.8 1.8 3.4-4" />
       </svg>
     );
   }
