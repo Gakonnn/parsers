@@ -19,6 +19,12 @@ export type AuthResponse = {
   user: User;
 };
 
+export type EmailCodeResponse = {
+  ok: boolean;
+  email: string;
+  expires_in_minutes: number;
+};
+
 export type ParserJob = {
   id: string;
   user_id: string;

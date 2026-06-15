@@ -61,6 +61,15 @@ class Settings:
     kaspi_pos_longitude: float
     kaspi_pos_timeout_sec: float
     kaspi_pos_webhook_secret: str
+    smtp_host: str
+    smtp_port: int
+    smtp_username: str
+    smtp_password: str
+    smtp_from_email: str
+    smtp_from_name: str
+    smtp_use_ssl: bool
+    smtp_use_tls: bool
+    email_code_expire_minutes: int
 
 
 @lru_cache
@@ -110,4 +119,13 @@ def get_settings() -> Settings:
         kaspi_pos_longitude=float(_getenv("KASPI_POS_LONGITUDE", default="76.891962364115912")),
         kaspi_pos_timeout_sec=float(_getenv("KASPI_POS_TIMEOUT_SEC", default="15")),
         kaspi_pos_webhook_secret=_getenv("KASPI_POS_WEBHOOK_SECRET", "PAYMENT_WEBHOOK_SECRET", default=""),
+        smtp_host=_getenv("BACKEND_SMTP_HOST", "SMTP_HOST", default=""),
+        smtp_port=int(_getenv("BACKEND_SMTP_PORT", "SMTP_PORT", default="465")),
+        smtp_username=_getenv("BACKEND_SMTP_USERNAME", "SMTP_USERNAME", default=""),
+        smtp_password=_getenv("BACKEND_SMTP_PASSWORD", "SMTP_PASSWORD", default=""),
+        smtp_from_email=_getenv("BACKEND_SMTP_FROM_EMAIL", "SMTP_FROM_EMAIL", default=""),
+        smtp_from_name=_getenv("BACKEND_SMTP_FROM_NAME", "SMTP_FROM_NAME", default="DataLeadHub"),
+        smtp_use_ssl=_as_bool(_getenv("BACKEND_SMTP_USE_SSL", "SMTP_USE_SSL", default="true"), default=True),
+        smtp_use_tls=_as_bool(_getenv("BACKEND_SMTP_USE_TLS", "SMTP_USE_TLS", default="false"), default=False),
+        email_code_expire_minutes=int(_getenv("BACKEND_EMAIL_CODE_EXPIRE_MINUTES", default="15")),
     )

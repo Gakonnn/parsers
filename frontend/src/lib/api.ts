@@ -2,6 +2,7 @@ import type {
   AuthResponse,
   AuditLog,
   Invoice,
+  EmailCodeResponse,
   ListResponse,
   NotificationList,
   ParserJob,
@@ -59,6 +60,11 @@ function humanizeApiError(message: string, status: number): string {
   if (message === "Incorrect email or password") return "Неверный email или пароль.";
   if (message === "User with this email already exists") return "Пользователь с таким email уже зарегистрирован.";
   if (message === "User account is disabled") return "Аккаунт отключен. Обратитесь к администратору.";
+  if (message === "Email is not verified. Verification code was sent.") return "Email не подтвержден. Код отправлен на почту.";
+  if (message === "Invalid or expired verification code") return "Неверный или просроченный код подтверждения.";
+  if (message === "Invalid or expired reset code") return "Неверный или просроченный код восстановления.";
+  if (message === "Email is already verified") return "Email уже подтвержден. Войдите с паролем.";
+  if (message === "User not found") return "Пользователь не найден.";
   if (message === "Failed to fetch") return "Не удалось подключиться к API. Проверьте, что backend запущен и доступен.";
   if (status === 0) return "Не удалось подключиться к API. Проверьте адрес backend.";
   return message || "Произошла ошибка запроса.";
@@ -93,9 +99,29 @@ export const api = {
       body: JSON.stringify({ email, password }),
     }),
   register: (email: string, password: string, fullName: string) =>
-    apiRequest<AuthResponse>("/auth/register", {
+    apiRequest<EmailCodeResponse>("/auth/register", {
       method: "POST",
       body: JSON.stringify({ email, password, full_name: fullName || null }),
+    }),
+  verifyEmail: (email: string, code: string) =>
+    apiRequest<AuthResponse>("/auth/verify-email", {
+      method: "POST",
+      body: JSON.stringify({ email, code }),
+    }),
+  resendVerification: (email: string) =>
+    apiRequest<EmailCodeResponse>("/auth/resend-verification", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+  requestPasswordReset: (email: string) =>
+    apiRequest<EmailCodeResponse>("/auth/password-reset/request", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+  confirmPasswordReset: (email: string, code: string, newPassword: string) =>
+    apiRequest<AuthResponse>("/auth/password-reset/confirm", {
+      method: "POST",
+      body: JSON.stringify({ email, code, new_password: newPassword }),
     }),
   me: () => apiRequest<User>("/users/me"),
   updateMe: (payload: UserProfileUpdateRequest) =>
