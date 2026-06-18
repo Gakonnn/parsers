@@ -162,13 +162,13 @@ export const api = {
     }),
   syncKaspiInvoice: (invoiceId: string) =>
     apiRequest<Invoice>(`/billing/invoices/${invoiceId}/kaspi/status`, { method: "POST" }),
-  results: (source = "", allUsers = false) =>
+  results: (source = "", allUsers = false, jobId = "") =>
     apiRequest<ListResponse<ParserResult> & { limit: number; offset: number }>(
-      `/results?limit=80&all_users=${allUsers ? "true" : "false"}${source ? `&source=${encodeURIComponent(source)}` : ""}`,
+      `/results?limit=80&all_users=${allUsers ? "true" : "false"}${source ? `&source=${encodeURIComponent(source)}` : ""}${jobId ? `&job_id=${encodeURIComponent(jobId)}` : ""}`,
     ),
-  resultFields: (source = "", allUsers = false) =>
+  resultFields: (source = "", allUsers = false, jobId = "") =>
     apiRequest<{ fields: string[] }>(
-      `/results/fields?all_users=${allUsers ? "true" : "false"}${source ? `&source=${encodeURIComponent(source)}` : ""}`,
+      `/results/fields?all_users=${allUsers ? "true" : "false"}${source ? `&source=${encodeURIComponent(source)}` : ""}${jobId ? `&job_id=${encodeURIComponent(jobId)}` : ""}`,
     ),
   olxCategories: () => apiRequest<OlxCategoriesTree>("/parser-meta/olx/categories"),
   twoGisRubrics: () => apiRequest<TwoGisRubricsTree>("/parser-meta/2gis/rubrics"),
@@ -218,10 +218,11 @@ export const api = {
     apiRequest<unknown>(`/billing/admin/invoices/${invoiceId}/mark-paid`, { method: "POST" }),
 };
 
-export async function downloadResults(format: "csv" | "xlsx" | "json", source = "", allUsers = false, adservlet = false): Promise<void> {
+export async function downloadResults(format: "csv" | "xlsx" | "json", source = "", allUsers = false, adservlet = false, jobId = ""): Promise<void> {
   const token = getToken();
   const query = new URLSearchParams({ format, all_users: allUsers ? "true" : "false" });
   if (source) query.set("source", source);
+  if (jobId) query.set("job_id", jobId);
   if (adservlet) query.set("adservlet", "true");
   const response = await fetch(`${apiBase()}/results/export?${query.toString()}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -231,7 +232,8 @@ export async function downloadResults(format: "csv" | "xlsx" | "json", source = 
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = adservlet ? `parser-results-adservlet.${format}` : `parser-results.${format}`;
+  const scope = jobId ? `-${jobId.slice(0, 8)}` : "";
+  anchor.download = adservlet ? `parser-results-adservlet${scope}.${format}` : `parser-results${scope}.${format}`;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();

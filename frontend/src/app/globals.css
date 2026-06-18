@@ -1228,6 +1228,45 @@ button:disabled {
   align-self: stretch;
 }
 
+.run-select-field {
+  min-width: 0;
+}
+
+.selected-run-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(130px, 0.5fr) minmax(130px, 0.5fr) auto;
+  gap: 12px;
+  align-items: center;
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: 22px;
+  background: rgba(11, 99, 246, 0.06);
+  box-shadow: var(--shadow-border);
+}
+
+.selected-run-card div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.selected-run-card span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.selected-run-card strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .field-cloud {
   display: flex;
   flex-wrap: wrap;
@@ -2538,6 +2577,7 @@ button:disabled {
 
   .table-card { overflow-x: auto; }
   .data-table { min-width: 720px; }
+  .selected-run-card { grid-template-columns: 1fr 1fr; }
   .audit-list article { grid-template-columns: 1fr; }
   .admin-user-card,
   .admin-user-controls { grid-template-columns: 1fr; }
@@ -2580,6 +2620,11 @@ button:disabled {
   .admin-section-tab {
     min-height: 72px;
     border-radius: 19px;
+  }
+
+  .selected-run-card {
+    grid-template-columns: 1fr;
+    border-radius: 18px;
   }
 
   .source-switcher {
