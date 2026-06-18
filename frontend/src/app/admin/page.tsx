@@ -10,6 +10,8 @@ import type { AuditLog, Invoice, SubscriptionPlan, SupportMessage, User } from "
 
 const sourceOptions = ["olx", "krisha", "2gis"];
 
+type AdminSection = "support" | "users" | "plans" | "billing" | "audit";
+
 type PlanForm = {
   code: string;
   name: string;
@@ -38,11 +40,23 @@ export default function AdminPage() {
   const [supportMessages, setSupportMessages] = useState<SupportMessage[]>([]);
   const [selectedPlanByUser, setSelectedPlanByUser] = useState<Record<string, string>>({});
   const [planForm, setPlanForm] = useState<PlanForm>(initialPlanForm);
+  const [activeSection, setActiveSection] = useState<AdminSection>("support");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState("");
 
   const usersById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
+  const pendingSupportCount = supportMessages.filter((item) => item.status !== "closed").length;
+  const pendingInvoiceCount = invoices.filter((invoice) => invoice.status !== "paid").length;
+  const publicPlanCount = plans.filter((plan) => plan.is_public && plan.is_active).length;
+
+  const sections: Array<{ key: AdminSection; label: string; hint: string; count: number }> = [
+    { key: "support", label: "Поддержка", hint: "Обращения", count: pendingSupportCount },
+    { key: "users", label: "Пользователи", hint: "Доступы", count: users.length },
+    { key: "plans", label: "Тарифы", hint: "Планы", count: plans.length },
+    { key: "billing", label: "Оплаты", hint: "Счета", count: pendingInvoiceCount },
+    { key: "audit", label: "Журнал", hint: "События", count: audit.length },
+  ];
 
   async function load() {
     const [usersResponse, auditResponse, invoiceResponse, planResponse, supportResponse] = await Promise.all([
@@ -66,8 +80,13 @@ export default function AdminPage() {
     });
   }
 
-  useEffect(() => {
+  function refreshAdmin() {
+    setMessage("");
     load().catch((err) => setError(err instanceof Error ? err.message : "Нет доступа к админке"));
+  }
+
+  useEffect(() => {
+    refreshAdmin();
   }, []);
 
   function setPlanField<K extends keyof PlanForm>(key: K, value: PlanForm[K]) {
@@ -184,179 +203,237 @@ export default function AdminPage() {
   }
 
   return (
-    <AppShell eyebrow="Администрирование" title="Админ-панель">
+    <AppShell
+      actions={<button className="ghost-button" type="button" onClick={refreshAdmin}>Обновить</button>}
+      eyebrow="Администрирование"
+      title="Админ-панель"
+    >
       {message ? <div className={message.includes("Не удалось") ? "form-message error admin-message" : "form-message admin-message"}>{message}</div> : null}
 
-      <section className="panel-card admin-support-panel">
-        <div className="section-heading horizontal">
-          <div><span className="eyebrow">Поддержка</span><h2>Обращения с сайта</h2></div>
-          <button className="ghost-button" type="button" onClick={() => load().catch(() => undefined)}>Обновить</button>
-        </div>
-        {supportMessages.length ? (
-          <div className="admin-support-list">
-            {supportMessages.map((item) => (
-              <article className="admin-support-card" key={item.id}>
-                <div className="admin-support-main">
-                  <div>
-                    <strong>{item.name}</strong>
-                    <span>{item.email}{item.phone ? ` · ${item.phone}` : ""}</span>
-                  </div>
-                  <StatusPill status={item.status} />
-                </div>
-                <p>{item.message}</p>
-                <div className="admin-support-footer">
-                  <small>{formatDate(item.created_at)} · {item.source}</small>
-                  <div className="button-row">
-                    <button className="ghost-button small-button" disabled={busy === `support-${item.id}` || item.status === "new"} type="button" onClick={() => updateSupportMessage(item, "new").catch(() => undefined)}>Новое</button>
-                    <button className="ghost-button small-button" disabled={busy === `support-${item.id}` || item.status === "in_progress"} type="button" onClick={() => updateSupportMessage(item, "in_progress").catch(() => undefined)}>В работе</button>
-                    <button className="ghost-button small-button" disabled={busy === `support-${item.id}` || item.status === "closed"} type="button" onClick={() => updateSupportMessage(item, "closed").catch(() => undefined)}>Закрыто</button>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <EmptyState title="Обращений пока нет" text="Сообщения из формы поддержки появятся здесь." />
-        )}
+      <section className="admin-overview-grid" aria-label="Сводка админ-панели">
+        <button className="admin-overview-card" type="button" onClick={() => setActiveSection("support")}>
+          <span>Открытые обращения</span>
+          <strong>{pendingSupportCount}</strong>
+          <small>{supportMessages.length} всего</small>
+        </button>
+        <button className="admin-overview-card" type="button" onClick={() => setActiveSection("users")}>
+          <span>Пользователи</span>
+          <strong>{users.length}</strong>
+          <small>{users.filter((user) => user.role === "admin").length} админов</small>
+        </button>
+        <button className="admin-overview-card" type="button" onClick={() => setActiveSection("plans")}>
+          <span>Публичные тарифы</span>
+          <strong>{publicPlanCount}</strong>
+          <small>{plans.length} в каталоге</small>
+        </button>
+        <button className="admin-overview-card" type="button" onClick={() => setActiveSection("billing")}>
+          <span>Счета к проверке</span>
+          <strong>{pendingInvoiceCount}</strong>
+          <small>{invoices.length} последних</small>
+        </button>
       </section>
 
-      <section className="admin-control-grid">
-        <div className="panel-card admin-users-panel">
-          <div className="section-heading horizontal">
-            <div><span className="eyebrow">Пользователи</span><h2>Пользователи и доступ</h2></div>
-            <button className="ghost-button" type="button" onClick={() => load().catch(() => undefined)}>Обновить</button>
-          </div>
-          <div className="admin-user-list">
-            {users.map((user) => (
-              <article className="admin-user-card" key={user.id}>
-                <div className="admin-user-main">
-                  <strong>{user.full_name || user.email}</strong>
-                  <span>{user.email}</span>
-                  <small>{truncateMiddle(user.id)}</small>
-                </div>
-                <div className="admin-user-controls">
-                  <label>
-                    <span>Роль</span>
-                    <select value={user.role} disabled={busy === `user-${user.id}`} onChange={(event) => updateUser(user, { role: event.target.value }).catch(() => undefined)}>
-                      <option value="user">user</option>
-                      <option value="admin">admin</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>Статус</span>
-                    <select value={user.is_active ? "active" : "blocked"} disabled={busy === `user-${user.id}`} onChange={(event) => updateUser(user, { is_active: event.target.value === "active" }).catch(() => undefined)}>
-                      <option value="active">Активен</option>
-                      <option value="blocked">Отключен</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>Тариф</span>
-                    <select value={selectedPlanByUser[user.id] || ""} onChange={(event) => setSelectedPlanByUser((current) => ({ ...current, [user.id]: event.target.value }))}>
-                      {plans.map((plan) => <option key={plan.id} value={plan.code}>{plan.name} ({plan.code})</option>)}
-                    </select>
-                  </label>
-                  <button className="primary-button" disabled={!plans.length || busy === `assign-${user.id}`} type="button" onClick={() => assignPlan(user).catch(() => undefined)}>
-                    Назначить
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
+      <nav className="admin-section-tabs" aria-label="Разделы админ-панели">
+        {sections.map((section) => (
+          <button
+            aria-current={activeSection === section.key ? "page" : undefined}
+            className={activeSection === section.key ? "admin-section-tab active" : "admin-section-tab"}
+            key={section.key}
+            type="button"
+            onClick={() => setActiveSection(section.key)}
+          >
+            <span>{section.label}</span>
+            <small>{section.hint}</small>
+            <strong>{section.count}</strong>
+          </button>
+        ))}
+      </nav>
 
-        <div className="panel-card plan-builder-card">
-          <div className="section-heading"><span className="eyebrow">Тарифы</span><h2>Создать тариф</h2></div>
-          <form className="admin-form" onSubmit={createPlan}>
-            <div className="form-grid two equal">
-              <label className="field-block compact"><span>Код</span><input value={planForm.code} onChange={(event) => setPlanField("code", event.target.value)} required /></label>
-              <label className="field-block compact"><span>Название</span><input value={planForm.name} onChange={(event) => setPlanField("name", event.target.value)} required /></label>
+      <div className="admin-section-panel" key={activeSection}>
+        {activeSection === "support" ? (
+          <section className="panel-card admin-support-panel">
+            <div className="section-heading horizontal">
+              <div><span className="eyebrow">Поддержка</span><h2>Обращения с сайта</h2></div>
+              <button className="ghost-button" type="button" onClick={refreshAdmin}>Обновить</button>
             </div>
-            <label className="field-block compact"><span>Описание</span><input value={planForm.description} onChange={(event) => setPlanField("description", event.target.value)} /></label>
-            <div className="form-grid two equal">
-              <label className="field-block compact"><span>Цена KZT</span><input min={0} type="number" value={planForm.price_kzt} onChange={(event) => setPlanField("price_kzt", Number(event.target.value))} /></label>
-              <label className="field-block compact"><span>Записей / месяц</span><input min={-1} type="number" value={planForm.max_records_per_month} onChange={(event) => setPlanField("max_records_per_month", Number(event.target.value))} /></label>
+            {supportMessages.length ? (
+              <div className="admin-support-list">
+                {supportMessages.map((item) => (
+                  <article className="admin-support-card" key={item.id}>
+                    <div className="admin-support-main">
+                      <div>
+                        <strong>{item.name}</strong>
+                        <span>{item.email}{item.phone ? ` · ${item.phone}` : ""}</span>
+                      </div>
+                      <StatusPill status={item.status} />
+                    </div>
+                    <p>{item.message}</p>
+                    <div className="admin-support-footer">
+                      <small>{formatDate(item.created_at)} · {item.source}</small>
+                      <div className="button-row">
+                        <button className="ghost-button small-button" disabled={busy === `support-${item.id}` || item.status === "new"} type="button" onClick={() => updateSupportMessage(item, "new").catch(() => undefined)}>Новое</button>
+                        <button className="ghost-button small-button" disabled={busy === `support-${item.id}` || item.status === "in_progress"} type="button" onClick={() => updateSupportMessage(item, "in_progress").catch(() => undefined)}>В работе</button>
+                        <button className="ghost-button small-button" disabled={busy === `support-${item.id}` || item.status === "closed"} type="button" onClick={() => updateSupportMessage(item, "closed").catch(() => undefined)}>Закрыто</button>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="Обращений пока нет" text="Сообщения из формы поддержки появятся здесь." />
+            )}
+          </section>
+        ) : null}
+
+        {activeSection === "users" ? (
+          <section className="panel-card admin-users-panel">
+            <div className="section-heading horizontal">
+              <div><span className="eyebrow">Пользователи</span><h2>Пользователи и доступ</h2></div>
+              <button className="ghost-button" type="button" onClick={refreshAdmin}>Обновить</button>
             </div>
-            <div className="source-checkboxes">
-              {sourceOptions.map((source) => (
-                <label key={source}>
-                  <input
-                    checked={planForm.allowed_sources.includes(source)}
-                    type="checkbox"
-                    onChange={(event) => {
-                      setPlanField(
-                        "allowed_sources",
-                        event.target.checked
-                          ? [...planForm.allowed_sources, source]
-                          : planForm.allowed_sources.filter((item) => item !== source),
-                      );
-                    }}
-                  />
-                  {source}
-                </label>
+            <div className="admin-user-list">
+              {users.map((user) => (
+                <article className="admin-user-card" key={user.id}>
+                  <div className="admin-user-main">
+                    <strong>{user.full_name || user.email}</strong>
+                    <span>{user.email}</span>
+                    <small>{truncateMiddle(user.id)}</small>
+                  </div>
+                  <div className="admin-user-controls">
+                    <label>
+                      <span>Роль</span>
+                      <select value={user.role} disabled={busy === `user-${user.id}`} onChange={(event) => updateUser(user, { role: event.target.value }).catch(() => undefined)}>
+                        <option value="user">user</option>
+                        <option value="admin">admin</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Статус</span>
+                      <select value={user.is_active ? "active" : "blocked"} disabled={busy === `user-${user.id}`} onChange={(event) => updateUser(user, { is_active: event.target.value === "active" }).catch(() => undefined)}>
+                        <option value="active">Активен</option>
+                        <option value="blocked">Отключен</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Тариф</span>
+                      <select value={selectedPlanByUser[user.id] || ""} onChange={(event) => setSelectedPlanByUser((current) => ({ ...current, [user.id]: event.target.value }))}>
+                        {plans.map((plan) => <option key={plan.id} value={plan.code}>{plan.name} ({plan.code})</option>)}
+                      </select>
+                    </label>
+                    <button className="primary-button" disabled={!plans.length || busy === `assign-${user.id}`} type="button" onClick={() => assignPlan(user).catch(() => undefined)}>
+                      Назначить
+                    </button>
+                  </div>
+                </article>
               ))}
             </div>
-            <label className="toggle-line"><input checked={planForm.is_public} type="checkbox" onChange={(event) => setPlanField("is_public", event.target.checked)} /> Публичный тариф</label>
-            <button className="primary-button wide" disabled={busy === "create-plan"} type="submit">Создать тариф</button>
-          </form>
-        </div>
-      </section>
+          </section>
+        ) : null}
 
-      <section className="admin-grid">
-        <div className="panel-card">
-          <div className="section-heading"><span className="eyebrow">Каталог тарифов</span><h2>Тарифы</h2></div>
-          <div className="plan-admin-list">
-            {plans.map((plan) => (
-              <article key={plan.id}>
-                <div>
-                  <strong>{plan.name}</strong>
-                  <span>{plan.code} · {formatMoney(plan.price_kzt, plan.currency)}</span>
+        {activeSection === "plans" ? (
+          <section className="admin-grid">
+            <div className="panel-card plan-builder-card">
+              <div className="section-heading"><span className="eyebrow">Тарифы</span><h2>Создать тариф</h2></div>
+              <form className="admin-form" onSubmit={createPlan}>
+                <div className="form-grid two equal">
+                  <label className="field-block compact"><span>Код</span><input value={planForm.code} onChange={(event) => setPlanField("code", event.target.value)} required /></label>
+                  <label className="field-block compact"><span>Название</span><input value={planForm.name} onChange={(event) => setPlanField("name", event.target.value)} required /></label>
                 </div>
-                <small>{plan.max_records_per_month} записей · {plan.allowed_sources.join(", ") || "all"}</small>
-                <div className="button-row">
-                  <button className="ghost-button" disabled={busy === `plan-${plan.id}`} type="button" onClick={() => togglePlan(plan, "is_active").catch(() => undefined)}>{plan.is_active ? "Отключить" : "Включить"}</button>
-                  <button className="ghost-button" disabled={busy === `plan-${plan.id}`} type="button" onClick={() => togglePlan(plan, "is_public").catch(() => undefined)}>{plan.is_public ? "Скрыть" : "Опубликовать"}</button>
+                <label className="field-block compact"><span>Описание</span><input value={planForm.description} onChange={(event) => setPlanField("description", event.target.value)} /></label>
+                <div className="form-grid two equal">
+                  <label className="field-block compact"><span>Цена KZT</span><input min={0} type="number" value={planForm.price_kzt} onChange={(event) => setPlanField("price_kzt", Number(event.target.value))} /></label>
+                  <label className="field-block compact"><span>Записей / месяц</span><input min={-1} type="number" value={planForm.max_records_per_month} onChange={(event) => setPlanField("max_records_per_month", Number(event.target.value))} /></label>
                 </div>
-              </article>
-            ))}
-          </div>
-        </div>
+                <div className="source-checkboxes">
+                  {sourceOptions.map((source) => (
+                    <label key={source}>
+                      <input
+                        checked={planForm.allowed_sources.includes(source)}
+                        type="checkbox"
+                        onChange={(event) => {
+                          setPlanField(
+                            "allowed_sources",
+                            event.target.checked
+                              ? [...planForm.allowed_sources, source]
+                              : planForm.allowed_sources.filter((item) => item !== source),
+                          );
+                        }}
+                      />
+                      {source}
+                    </label>
+                  ))}
+                </div>
+                <label className="toggle-line"><input checked={planForm.is_public} type="checkbox" onChange={(event) => setPlanField("is_public", event.target.checked)} /> Публичный тариф</label>
+                <button className="primary-button wide" disabled={busy === "create-plan"} type="submit">Создать тариф</button>
+              </form>
+            </div>
 
-        <div className="panel-card">
-          <div className="section-heading"><span className="eyebrow">Оплаты</span><h2>Счета</h2></div>
-          <div className="data-table invoices-table admin-invoices-table">
-            <div className="table-row table-head"><span>Клиент</span><span>Сумма</span><span>Статус</span><span>Действие</span></div>
-            {invoices.map((invoice) => (
-              <div className="table-row" key={invoice.id}>
-                <span>{usersById.get(invoice.user_id)?.email || truncateMiddle(invoice.user_id)}</span>
-                <span>{formatMoney(invoice.amount_kzt, invoice.currency)}</span>
-                <span><StatusPill status={invoice.status} /></span>
-                <span>
-                  <button className="ghost-button small-button" disabled={invoice.status === "paid" || busy === `invoice-${invoice.id}`} type="button" onClick={() => markInvoicePaid(invoice).catch(() => undefined)}>
-                    Подтвердить
-                  </button>
-                </span>
+            <div className="panel-card">
+              <div className="section-heading"><span className="eyebrow">Каталог тарифов</span><h2>Тарифы</h2></div>
+              <div className="plan-admin-list">
+                {plans.map((plan) => (
+                  <article key={plan.id}>
+                    <div>
+                      <strong>{plan.name}</strong>
+                      <span>{plan.code} · {formatMoney(plan.price_kzt, plan.currency)}</span>
+                    </div>
+                    <small>{plan.max_records_per_month} записей · {plan.allowed_sources.join(", ") || "all"}</small>
+                    <div className="button-row">
+                      <button className="ghost-button" disabled={busy === `plan-${plan.id}`} type="button" onClick={() => togglePlan(plan, "is_active").catch(() => undefined)}>{plan.is_active ? "Отключить" : "Включить"}</button>
+                      <button className="ghost-button" disabled={busy === `plan-${plan.id}`} type="button" onClick={() => togglePlan(plan, "is_public").catch(() => undefined)}>{plan.is_public ? "Скрыть" : "Опубликовать"}</button>
+                    </div>
+                  </article>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
+            </div>
+          </section>
+        ) : null}
 
-      <section className="panel-card">
-        <div className="section-heading horizontal">
-          <div><span className="eyebrow">Журнал</span><h2>Журнал действий</h2></div>
-          <button className="ghost-button" type="button" onClick={() => load().catch(() => undefined)}>Обновить</button>
-        </div>
-        <div className="audit-list">
-          {audit.map((item) => (
-            <article key={item.id}>
-              <span>{formatDate(item.created_at)}</span>
-              <strong>{item.event_type}</strong>
-              <p>{item.message || item.entity_type || "system event"}</p>
-              <small>{truncateMiddle(item.entity_id || item.id)}</small>
-            </article>
-          ))}
-        </div>
-      </section>
+        {activeSection === "billing" ? (
+          <section className="panel-card">
+            <div className="section-heading horizontal">
+              <div><span className="eyebrow">Оплаты</span><h2>Счета</h2></div>
+              <button className="ghost-button" type="button" onClick={refreshAdmin}>Обновить</button>
+            </div>
+            <div className="data-table invoices-table admin-invoices-table">
+              <div className="table-row table-head"><span>Клиент</span><span>Сумма</span><span>Статус</span><span>Действие</span></div>
+              {invoices.map((invoice) => (
+                <div className="table-row" key={invoice.id}>
+                  <span>{usersById.get(invoice.user_id)?.email || truncateMiddle(invoice.user_id)}</span>
+                  <span>{formatMoney(invoice.amount_kzt, invoice.currency)}</span>
+                  <span><StatusPill status={invoice.status} /></span>
+                  <span>
+                    <button className="ghost-button small-button" disabled={invoice.status === "paid" || busy === `invoice-${invoice.id}`} type="button" onClick={() => markInvoicePaid(invoice).catch(() => undefined)}>
+                      Подтвердить
+                    </button>
+                  </span>
+                </div>
+              ))}
+            </div>
+            {!invoices.length ? <EmptyState title="Счетов пока нет" text="Новые счета появятся здесь после выбора тарифа пользователем." /> : null}
+          </section>
+        ) : null}
+
+        {activeSection === "audit" ? (
+          <section className="panel-card">
+            <div className="section-heading horizontal">
+              <div><span className="eyebrow">Журнал</span><h2>Журнал действий</h2></div>
+              <button className="ghost-button" type="button" onClick={refreshAdmin}>Обновить</button>
+            </div>
+            <div className="audit-list">
+              {audit.map((item) => (
+                <article key={item.id}>
+                  <span>{formatDate(item.created_at)}</span>
+                  <strong>{item.event_type}</strong>
+                  <p>{item.message || item.entity_type || "system event"}</p>
+                  <small>{truncateMiddle(item.entity_id || item.id)}</small>
+                </article>
+              ))}
+            </div>
+            {!audit.length ? <EmptyState title="Журнал пуст" text="События появятся здесь после действий пользователей и администраторов." /> : null}
+          </section>
+        ) : null}
+      </div>
     </AppShell>
   );
 }

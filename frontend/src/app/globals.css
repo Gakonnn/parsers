@@ -1461,6 +1461,145 @@ button:disabled {
 
 .admin-message { margin-bottom: 14px; }
 
+.admin-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.admin-overview-card {
+  display: grid;
+  min-height: 128px;
+  padding: 18px;
+  border: 0;
+  border-radius: 24px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 18px 50px rgba(11, 99, 246, 0.08), var(--shadow-border);
+  text-align: left;
+  transition: transform 180ms var(--ease-out), box-shadow 180ms var(--ease-out), background 180ms var(--ease-out);
+}
+
+.admin-overview-card:hover {
+  transform: translateY(-2px);
+  background: #ffffff;
+  box-shadow: 0 22px 54px rgba(11, 99, 246, 0.13), var(--shadow-border);
+}
+
+.admin-overview-card:active {
+  transform: scale(0.96);
+}
+
+.admin-overview-card span,
+.admin-overview-card small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.admin-overview-card span {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-overview-card strong {
+  margin-top: 8px;
+  font-size: clamp(32px, 4vw, 48px);
+  font-weight: 950;
+  letter-spacing: -0.065em;
+  line-height: 0.95;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-section-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+  overflow-x: auto;
+  padding: 4px 2px 8px;
+  scrollbar-width: thin;
+}
+
+.admin-section-tab {
+  position: relative;
+  display: grid;
+  min-height: 82px;
+  padding: 14px 16px;
+  border: 1px solid rgba(11, 99, 246, 0.08);
+  border-radius: 22px;
+  color: #64748b;
+  background: rgba(255, 255, 255, 0.56);
+  box-shadow: var(--shadow-border);
+  text-align: left;
+  transition: transform 180ms var(--ease-out), border-color 180ms var(--ease-out), background 180ms var(--ease-out), box-shadow 180ms var(--ease-out), color 180ms var(--ease-out);
+}
+
+.admin-section-tab:hover {
+  transform: translateY(-1px);
+  border-color: rgba(11, 99, 246, 0.18);
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.admin-section-tab:active {
+  transform: scale(0.96);
+}
+
+.admin-section-tab.active {
+  border-color: rgba(11, 99, 246, 0.26);
+  color: #0f172a;
+  background: #ffffff;
+  box-shadow: 0 18px 44px rgba(11, 99, 246, 0.12), var(--shadow-border);
+}
+
+.admin-section-tab span {
+  font-size: 14px;
+  font-weight: 950;
+  letter-spacing: -0.015em;
+}
+
+.admin-section-tab small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-section-tab strong {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  display: inline-flex;
+  min-width: 30px;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 9px;
+  border-radius: 999px;
+  color: #0b63f6;
+  background: rgba(11, 99, 246, 0.1);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-section-panel {
+  animation: admin-panel-in 240ms var(--ease-out) both;
+}
+
+@keyframes admin-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .admin-support-panel {
   margin-bottom: 18px;
 }
@@ -2318,6 +2457,7 @@ button:disabled {
 /* Responsive */
 @media (max-width: 1180px) {
   .dashboard-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .split-layout,
   .split-layout.wide-left,
   .admin-grid,
@@ -2401,6 +2541,10 @@ button:disabled {
   .audit-list article { grid-template-columns: 1fr; }
   .admin-user-card,
   .admin-user-controls { grid-template-columns: 1fr; }
+  .admin-section-tabs {
+    grid-template-columns: repeat(5, minmax(142px, 1fr));
+    margin-inline: -2px;
+  }
   .settings-hero-stats { min-width: 0; width: 100%; }
 }
 
@@ -2417,6 +2561,25 @@ button:disabled {
   .billing-hero {
     padding: 18px;
     border-radius: 24px;
+  }
+
+  .admin-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-overview-card {
+    min-height: 104px;
+    border-radius: 22px;
+  }
+
+  .admin-section-tabs {
+    grid-template-columns: repeat(5, minmax(132px, 1fr));
+    gap: 8px;
+  }
+
+  .admin-section-tab {
+    min-height: 72px;
+    border-radius: 19px;
   }
 
   .source-switcher {
