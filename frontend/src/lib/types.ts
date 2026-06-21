@@ -195,6 +195,16 @@ export type PaymentProviderInfo = {
   kaspi_pos_base_url?: string | null;
 };
 
+export type PaymentQrSetting = {
+  id: string;
+  title: string;
+  note?: string | null;
+  image_data?: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 export type UserProfileUpdateRequest = {
   full_name?: string | null;
 };

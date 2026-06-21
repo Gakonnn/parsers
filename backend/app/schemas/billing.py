@@ -80,7 +80,8 @@ class UsageSummary(BaseModel):
 class InvoiceCreateRequest(BaseModel):
     plan_id: UUID | None = None
     plan_code: str | None = None
-    provider: str = Field(default="manual", max_length=64)
+    provider: str = Field(default="manual_qr", max_length=64)
+    receipt_id: str | None = Field(default=None, max_length=128)
 
 
 class InvoicePublic(BaseModel):
@@ -143,3 +144,22 @@ class PaymentProviderPublic(BaseModel):
     webhook_secret_configured: bool
     kaspi_qr_enabled: bool = False
     kaspi_pos_base_url: str | None = None
+
+
+class PaymentQrSettingPublic(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    title: str
+    note: str | None = None
+    image_data: str | None = None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class PaymentQrSettingUpdate(BaseModel):
+    title: str = Field(default="Kaspi QR", min_length=2, max_length=255)
+    note: str | None = None
+    image_data: str | None = None
+    is_active: bool = True

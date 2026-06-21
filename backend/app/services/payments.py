@@ -11,7 +11,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.models.billing import Invoice, InvoiceStatus, Payment, PaymentStatus, SubscriptionPlan, SubscriptionStatus, UserSubscription
+from app.models.billing import (
+    Invoice,
+    InvoiceStatus,
+    Payment,
+    PaymentQrSetting,
+    PaymentStatus,
+    SubscriptionPlan,
+    SubscriptionStatus,
+    UserSubscription,
+)
 from app.models.user import User
 from app.services.kaspi_pos import (
     KASPI_QR_PROVIDER,
@@ -20,6 +29,9 @@ from app.services.kaspi_pos import (
     extract_qr_status,
     fetch_qr_status,
 )
+
+
+MANUAL_QR_PROVIDER = "manual_qr"
 
 
 def _now() -> datetime:
@@ -87,6 +99,53 @@ def create_invoice_for_plan(db: Session, *, user: User, plan: SubscriptionPlan, 
         invoice.payment_url = _build_checkout_url(invoice, plan)
     db.flush()
     return invoice
+
+
+def get_active_payment_qr_setting(db: Session) -> PaymentQrSetting | None:
+    return db.scalar(
+        select(PaymentQrSetting)
+        .where(PaymentQrSetting.is_active.is_(True), PaymentQrSetting.image_data.is_not(None))
+        .order_by(PaymentQrSetting.updated_at.desc(), PaymentQrSetting.created_at.desc())
+    )
+
+
+def get_latest_payment_qr_setting(db: Session) -> PaymentQrSetting | None:
+    return db.scalar(select(PaymentQrSetting).order_by(PaymentQrSetting.updated_at.desc(), PaymentQrSetting.created_at.desc()))
+
+
+def upsert_payment_qr_setting(
+    db: Session,
+    *,
+    title: str,
+    note: str | None,
+    image_data: str | None,
+    is_active: bool,
+    admin: User,
+) -> PaymentQrSetting:
+    setting = get_latest_payment_qr_setting(db)
+    if setting is None:
+        setting = PaymentQrSetting(created_by_user_id=admin.id)
+        db.add(setting)
+    setting.title = title.strip() or "Kaspi QR"
+    setting.note = note.strip() if isinstance(note, str) and note.strip() else None
+    setting.image_data = image_data.strip() if isinstance(image_data, str) and image_data.strip() else None
+    setting.is_active = is_active
+    setting.created_by_user_id = setting.created_by_user_id or admin.id
+    db.flush()
+    return setting
+
+
+def attach_manual_qr_receipt(invoice: Invoice, *, receipt_id: str, qr_setting: PaymentQrSetting | None) -> None:
+    metadata = dict(invoice.metadata_json or {})
+    metadata["manual_qr"] = {
+        "receipt_id": receipt_id.strip(),
+        "submitted_at": _now().isoformat(),
+        "status": "waiting_moderation",
+        "qr_setting_id": str(qr_setting.id) if qr_setting is not None else None,
+        "qr_title": qr_setting.title if qr_setting is not None else None,
+    }
+    invoice.metadata_json = metadata
+    invoice.provider_invoice_id = receipt_id.strip()
 
 
 def _build_checkout_url(invoice: Invoice, plan: SubscriptionPlan) -> str:

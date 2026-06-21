@@ -1,12 +1,12 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { EmptyState } from "@/components/empty-state";
 import { StatusPill } from "@/components/status-pill";
 import { api } from "@/lib/api";
 import { formatDate, formatMoney, truncateMiddle } from "@/lib/format";
-import type { AuditLog, Invoice, SubscriptionPlan, SupportMessage, User } from "@/lib/types";
+import type { AuditLog, Invoice, PaymentQrSetting, SubscriptionPlan, SupportMessage, User } from "@/lib/types";
 
 const sourceOptions = ["olx", "krisha", "2gis"];
 
@@ -32,14 +32,37 @@ const initialPlanForm: PlanForm = {
   is_public: true,
 };
 
+type PaymentQrForm = {
+  title: string;
+  note: string;
+  image_data: string;
+  is_active: boolean;
+};
+
+const initialPaymentQrForm: PaymentQrForm = {
+  title: "Kaspi QR",
+  note: "Отсканируйте QR, оплатите тариф и отправьте ID чека.",
+  image_data: "",
+  is_active: true,
+};
+
+function receiptIdForInvoice(invoice: Invoice): string {
+  const meta = invoice.metadata_json?.manual_qr;
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return invoice.provider_invoice_id || "-";
+  const receiptId = (meta as { receipt_id?: unknown }).receipt_id;
+  return typeof receiptId === "string" && receiptId.trim() ? receiptId : invoice.provider_invoice_id || "-";
+}
+
 export default function AdminPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [audit, setAudit] = useState<AuditLog[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [supportMessages, setSupportMessages] = useState<SupportMessage[]>([]);
+  const [paymentQr, setPaymentQr] = useState<PaymentQrSetting | null>(null);
   const [selectedPlanByUser, setSelectedPlanByUser] = useState<Record<string, string>>({});
   const [planForm, setPlanForm] = useState<PlanForm>(initialPlanForm);
+  const [paymentQrForm, setPaymentQrForm] = useState<PaymentQrForm>(initialPaymentQrForm);
   const [activeSection, setActiveSection] = useState<AdminSection>("support");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -59,18 +82,30 @@ export default function AdminPage() {
   ];
 
   async function load() {
-    const [usersResponse, auditResponse, invoiceResponse, planResponse, supportResponse] = await Promise.all([
+    const [usersResponse, auditResponse, invoiceResponse, planResponse, supportResponse, paymentQrResponse] = await Promise.all([
       api.adminUsers(),
       api.adminAudit(),
       api.adminInvoices(),
       api.adminPlans(),
       api.adminSupportMessages(),
+      api.adminPaymentQr(),
     ]);
     setUsers(usersResponse.items);
     setAudit(auditResponse.items);
     setInvoices(invoiceResponse.items);
     setPlans(planResponse);
     setSupportMessages(supportResponse.items);
+    setPaymentQr(paymentQrResponse);
+    setPaymentQrForm(
+      paymentQrResponse
+        ? {
+            title: paymentQrResponse.title,
+            note: paymentQrResponse.note || "",
+            image_data: paymentQrResponse.image_data || "",
+            is_active: paymentQrResponse.is_active,
+          }
+        : initialPaymentQrForm,
+    );
     setSelectedPlanByUser((current) => {
       const next = { ...current };
       usersResponse.items.forEach((user) => {
@@ -91,6 +126,41 @@ export default function AdminPage() {
 
   function setPlanField<K extends keyof PlanForm>(key: K, value: PlanForm[K]) {
     setPlanForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function setPaymentQrField<K extends keyof PaymentQrForm>(key: K, value: PaymentQrForm[K]) {
+    setPaymentQrForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function handlePaymentQrFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") setPaymentQrField("image_data", reader.result);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function savePaymentQr(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy("payment-qr");
+    setMessage("");
+    try {
+      const updated = await api.adminUpdatePaymentQr({
+        title: paymentQrForm.title.trim() || "Kaspi QR",
+        note: paymentQrForm.note.trim() || null,
+        image_data: paymentQrForm.image_data,
+        is_active: paymentQrForm.is_active,
+      });
+      setPaymentQr(updated);
+      setMessage("QR-код оплаты сохранен.");
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Не удалось сохранить QR-код");
+    } finally {
+      setBusy("");
+    }
   }
 
   async function createPlan(event: FormEvent<HTMLFormElement>) {
@@ -390,27 +460,50 @@ export default function AdminPage() {
         ) : null}
 
         {activeSection === "billing" ? (
-          <section className="panel-card">
-            <div className="section-heading horizontal">
-              <div><span className="eyebrow">Оплаты</span><h2>Счета</h2></div>
-              <button className="ghost-button" type="button" onClick={refreshAdmin}>Обновить</button>
-            </div>
-            <div className="data-table invoices-table admin-invoices-table">
-              <div className="table-row table-head"><span>Клиент</span><span>Сумма</span><span>Статус</span><span>Действие</span></div>
-              {invoices.map((invoice) => (
-                <div className="table-row" key={invoice.id}>
-                  <span>{usersById.get(invoice.user_id)?.email || truncateMiddle(invoice.user_id)}</span>
-                  <span>{formatMoney(invoice.amount_kzt, invoice.currency)}</span>
-                  <span><StatusPill status={invoice.status} /></span>
-                  <span>
-                    <button className="ghost-button small-button" disabled={invoice.status === "paid" || busy === `invoice-${invoice.id}`} type="button" onClick={() => markInvoicePaid(invoice).catch(() => undefined)}>
-                      Подтвердить
-                    </button>
-                  </span>
+          <section className="admin-payment-layout">
+            <form className="panel-card admin-qr-settings-card" onSubmit={savePaymentQr}>
+              <div className="section-heading horizontal">
+                <div><span className="eyebrow">QR оплата</span><h2>QR-код для покупателей</h2></div>
+                <StatusPill status={paymentQr?.is_active ? "active" : "pending"} />
+              </div>
+              <div className="admin-qr-settings-grid">
+                <label className="qr-upload-box">
+                  <input accept="image/*" type="file" onChange={handlePaymentQrFile} />
+                  {paymentQrForm.image_data ? <img alt="Текущий QR-код оплаты" src={paymentQrForm.image_data} /> : <span>Загрузить QR</span>}
+                </label>
+                <div className="admin-qr-fields">
+                  <label className="field-block compact"><span>Название</span><input value={paymentQrForm.title} onChange={(event) => setPaymentQrField("title", event.target.value)} /></label>
+                  <label className="field-block compact"><span>Текст для клиента</span><textarea rows={3} value={paymentQrForm.note} onChange={(event) => setPaymentQrField("note", event.target.value)} /></label>
+                  <label className="toggle-line"><input checked={paymentQrForm.is_active} type="checkbox" onChange={(event) => setPaymentQrField("is_active", event.target.checked)} /> QR активен</label>
+                  <button className="primary-button wide" disabled={busy === "payment-qr" || !paymentQrForm.image_data} type="submit">{busy === "payment-qr" ? "Сохраняем..." : "Сохранить QR"}</button>
                 </div>
-              ))}
-            </div>
-            {!invoices.length ? <EmptyState title="Счетов пока нет" text="Новые счета появятся здесь после выбора тарифа пользователем." /> : null}
+              </div>
+            </form>
+
+            <section className="panel-card">
+              <div className="section-heading horizontal">
+                <div><span className="eyebrow">Модерация</span><h2>Заявки на оплату</h2></div>
+                <button className="ghost-button" type="button" onClick={refreshAdmin}>Обновить</button>
+              </div>
+              <div className="data-table invoices-table admin-invoices-table payment-review-table">
+                <div className="table-row table-head"><span>Клиент</span><span>Тариф</span><span>Сумма</span><span>ID чека</span><span>Статус</span><span>Действие</span></div>
+                {invoices.map((invoice) => (
+                  <div className="table-row" key={invoice.id}>
+                    <span>{usersById.get(invoice.user_id)?.email || truncateMiddle(invoice.user_id)}</span>
+                    <span>{invoice.plan.name}</span>
+                    <span>{formatMoney(invoice.amount_kzt, invoice.currency)}</span>
+                    <span className="receipt-code">{receiptIdForInvoice(invoice)}</span>
+                    <span><StatusPill status={invoice.status} /></span>
+                    <span>
+                      <button className="ghost-button small-button" disabled={invoice.status === "paid" || busy === `invoice-${invoice.id}`} type="button" onClick={() => markInvoicePaid(invoice).catch(() => undefined)}>
+                        Подтвердить
+                      </button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {!invoices.length ? <EmptyState title="Заявок пока нет" text="Новые заявки появятся здесь после отправки ID чека пользователем." /> : null}
+            </section>
           </section>
         ) : null}
 

@@ -17,6 +17,7 @@ import type {
   UsageSummary,
   User,
   PaymentProviderInfo,
+  PaymentQrSetting,
   UserSubscription,
   UserProfileUpdateRequest,
   ChangePasswordRequest,
@@ -155,10 +156,11 @@ export const api = {
   paymentProvider: () => apiRequest<PaymentProviderInfo>("/billing/provider"),
   plans: () => apiRequest<SubscriptionPlan[]>("/billing/plans"),
   invoices: () => apiRequest<ListResponse<Invoice>>("/billing/invoices?limit=30"),
-  createInvoice: (planCode: string, provider = "kaspi_qr") =>
+  paymentQr: () => apiRequest<PaymentQrSetting | null>("/billing/payment-qr"),
+  createInvoice: (planCode: string, receiptId: string) =>
     apiRequest<Invoice>("/billing/invoices", {
       method: "POST",
-      body: JSON.stringify({ plan_code: planCode, provider }),
+      body: JSON.stringify({ plan_code: planCode, provider: "manual_qr", receipt_id: receiptId }),
     }),
   syncKaspiInvoice: (invoiceId: string) =>
     apiRequest<Invoice>(`/billing/invoices/${invoiceId}/kaspi/status`, { method: "POST" }),
@@ -214,6 +216,12 @@ export const api = {
       body: JSON.stringify({ plan_code: planCode }),
     }),
   adminInvoices: () => apiRequest<ListResponse<Invoice>>("/billing/admin/invoices?limit=20"),
+  adminPaymentQr: () => apiRequest<PaymentQrSetting | null>("/billing/admin/payment-qr"),
+  adminUpdatePaymentQr: (payload: { title: string; note?: string | null; image_data?: string | null; is_active: boolean }) =>
+    apiRequest<PaymentQrSetting>("/billing/admin/payment-qr", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
   adminMarkInvoicePaid: (invoiceId: string) =>
     apiRequest<unknown>(`/billing/admin/invoices/${invoiceId}/mark-paid`, { method: "POST" }),
 };

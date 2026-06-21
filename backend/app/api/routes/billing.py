@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, require_admin
 from app.core.config import get_settings
 from app.db.session import get_db
-from app.models.billing import Invoice, Payment, SubscriptionPlan, SubscriptionStatus, UserSubscription
+from app.models.billing import Invoice, Payment, PaymentQrSetting, SubscriptionPlan, SubscriptionStatus, UserSubscription
 from app.models.user import User
 from app.schemas.billing import (
     AssignSubscriptionRequest,
@@ -19,6 +19,8 @@ from app.schemas.billing import (
     InvoicePublic,
     PaymentPublic,
     PaymentProviderPublic,
+    PaymentQrSettingPublic,
+    PaymentQrSettingUpdate,
     SubscriptionPlanCreate,
     SubscriptionPlanPublic,
     SubscriptionPlanUpdate,
@@ -26,16 +28,21 @@ from app.schemas.billing import (
     UserSubscriptionPublic,
 )
 from app.services.payments import (
+    MANUAL_QR_PROVIDER,
+    attach_manual_qr_receipt,
     create_invoice_for_plan,
     find_plan,
+    get_active_payment_qr_setting,
+    get_latest_payment_qr_setting,
     mark_invoice_paid,
     process_kaspi_webhook,
     process_payment_webhook,
     sync_kaspi_invoice_status,
+    upsert_payment_qr_setting,
     verify_webhook_signature,
     webhook_payload_from_raw,
 )
-from app.services.kaspi_pos import KASPI_QR_PROVIDER, kaspi_pos_configured, verify_kaspi_webhook_signature
+from app.services.kaspi_pos import KASPI_QR_PROVIDER, verify_kaspi_webhook_signature
 from app.services.audit import log_event, notify_user
 from app.services.quota import current_month_start, get_monthly_usage, get_or_create_active_subscription
 
@@ -47,15 +54,20 @@ router = APIRouter()
 def read_payment_provider(_: User = Depends(get_current_user)) -> PaymentProviderPublic:
     settings = get_settings()
     return PaymentProviderPublic(
-        provider_name=settings.payment_provider_name,
-        checkout_mode=settings.payment_checkout_mode,
-        checkout_url_template=settings.payment_checkout_url_template or None,
+        provider_name=MANUAL_QR_PROVIDER,
+        checkout_mode="manual_qr",
+        checkout_url_template=None,
         success_url=settings.payment_success_url or None,
         cancel_url=settings.payment_cancel_url or None,
         webhook_secret_configured=bool(settings.payment_webhook_secret.strip()),
-        kaspi_qr_enabled=kaspi_pos_configured(),
-        kaspi_pos_base_url=settings.kaspi_pos_base_url or None,
+        kaspi_qr_enabled=False,
+        kaspi_pos_base_url=None,
     )
+
+
+@router.get("/payment-qr", response_model=PaymentQrSettingPublic | None)
+def read_payment_qr(db: Session = Depends(get_db), _: User = Depends(get_current_user)) -> PaymentQrSetting | None:
+    return get_active_payment_qr_setting(db)
 
 
 @router.get("/plans", response_model=list[SubscriptionPlanPublic])
@@ -93,7 +105,14 @@ def create_invoice(
     current_user: User = Depends(get_current_user),
 ) -> Invoice:
     plan = find_plan(db, plan_id=payload.plan_id, plan_code=payload.plan_code)
-    invoice = create_invoice_for_plan(db, user=current_user, plan=plan, provider=payload.provider)
+    receipt_id = (payload.receipt_id or "").strip()
+    if not receipt_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Receipt ID is required")
+    qr_setting = get_active_payment_qr_setting(db)
+    if qr_setting is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Payment QR is not configured")
+    invoice = create_invoice_for_plan(db, user=current_user, plan=plan, provider=MANUAL_QR_PROVIDER)
+    attach_manual_qr_receipt(invoice, receipt_id=receipt_id, qr_setting=qr_setting)
     log_event(
         db,
         event_type="invoice.created",
@@ -101,18 +120,28 @@ def create_invoice(
         target_user=current_user,
         entity_type="invoice",
         entity_id=invoice.id,
-        message="Payment invoice created",
-        payload={"plan_code": plan.code, "amount_kzt": invoice.amount_kzt, "provider": invoice.provider},
+        message="Manual QR payment invoice created",
+        payload={"plan_code": plan.code, "amount_kzt": invoice.amount_kzt, "provider": invoice.provider, "receipt_id": receipt_id},
         request=request,
     )
     notify_user(
         db,
         user=current_user,
-        type="invoice.created",
-        title="Счет создан",
-        body=f"Создан счет на тариф {plan.name}.",
+        type="invoice.waiting_moderation",
+        title="Заявка на оплату отправлена",
+        body=f"Чек по тарифу {plan.name} отправлен на модерацию.",
         payload={"invoice_id": str(invoice.id), "plan_code": plan.code, "amount_kzt": invoice.amount_kzt},
     )
+    admins = db.scalars(select(User).where(User.role == "admin", User.is_active.is_(True))).all()
+    for admin in admins:
+        notify_user(
+            db,
+            user=admin,
+            type="invoice.waiting_moderation",
+            title="Новая оплата на проверку",
+            body=f"{current_user.email} отправил чек {receipt_id} по тарифу {plan.name}.",
+            payload={"invoice_id": str(invoice.id), "user_id": str(current_user.id), "receipt_id": receipt_id},
+        )
     db.commit()
     db.refresh(invoice)
     return invoice
@@ -258,6 +287,44 @@ async def kaspi_payment_webhook(
     db.commit()
     db.refresh(invoice)
     return invoice
+
+
+@router.get("/admin/payment-qr", response_model=PaymentQrSettingPublic | None)
+def read_admin_payment_qr(db: Session = Depends(get_db), _: User = Depends(require_admin)) -> PaymentQrSetting | None:
+    return get_latest_payment_qr_setting(db)
+
+
+@router.put("/admin/payment-qr", response_model=PaymentQrSettingPublic)
+def update_admin_payment_qr(
+    payload: PaymentQrSettingUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(require_admin),
+) -> PaymentQrSetting:
+    image_data = payload.image_data or ""
+    if payload.is_active and not image_data.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="QR image is required")
+    setting = upsert_payment_qr_setting(
+        db,
+        title=payload.title,
+        note=payload.note,
+        image_data=payload.image_data,
+        is_active=payload.is_active,
+        admin=current_admin,
+    )
+    log_event(
+        db,
+        event_type="payment_qr.updated",
+        actor_user=current_admin,
+        entity_type="payment_qr_setting",
+        entity_id=setting.id,
+        message="Payment QR setting updated",
+        payload={"title": setting.title, "is_active": setting.is_active},
+        request=request,
+    )
+    db.commit()
+    db.refresh(setting)
+    return setting
 
 
 @router.post("/admin/plans", response_model=SubscriptionPlanPublic, status_code=status.HTTP_201_CREATED)
