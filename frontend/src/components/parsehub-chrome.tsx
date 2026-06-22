@@ -10,6 +10,7 @@ type NavigationItem = {
   href: string;
   label: string;
   aliases?: string[];
+  reserved?: boolean;
 };
 
 const publicNavigation: NavigationItem[] = [
@@ -25,6 +26,8 @@ const appNavigation: NavigationItem[] = [
   { href: "/billing", label: "Тарифы", aliases: ["/orders", "/cart"] },
   { href: "/profile", label: "Кабинет", aliases: ["/settings"] },
 ];
+
+const adminNavigationItem: NavigationItem = { href: "/admin", label: "Администратор" };
 
 const footerLinks = [
   { href: "/about", label: "О нас" },
@@ -99,7 +102,7 @@ export function DataLeadHubHeader({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const navigation = useMemo(() => {
     if (mode !== "app") return publicNavigation;
-    return isAdmin ? [...appNavigation, { href: "/admin", label: "Админка" }] : appNavigation;
+    return [...appNavigation, isAdmin ? adminNavigationItem : { ...adminNavigationItem, reserved: true }];
   }, [isAdmin, mode]);
 
   useEffect(() => {
@@ -141,7 +144,13 @@ export function DataLeadHubHeader({
             {navigation.map((item) => {
               const active = pathname === item.href || item.aliases?.includes(pathname);
               return (
-                <Link className={active ? "active" : ""} href={item.href} key={item.href}>
+                <Link
+                  aria-hidden={item.reserved ? "true" : undefined}
+                  className={`${active ? "active" : ""}${item.reserved ? " reserved" : ""}`}
+                  href={item.href}
+                  key={item.href}
+                  tabIndex={item.reserved ? -1 : undefined}
+                >
                   {item.label}
                 </Link>
               );
@@ -151,8 +160,10 @@ export function DataLeadHubHeader({
           <div className="parsehub-userbar">
             {mode === "app" ? (
               <>
-                <Link className="parsehub-login-link" href="/notifications">
-                  Уведомления{notificationsCount ? ` (${notificationsCount})` : ""}
+                <Link className="parsehub-login-link parsehub-notifications-link" href="/notifications">
+                  <BellIcon />
+                  <span className="parsehub-notifications-text">Уведомления</span>
+                  <span className="parsehub-notifications-count">{notificationsCount || 0}</span>
                 </Link>
                 <button className="parsehub-register-link" type="button" onClick={onLogout}>
                   Выйти
@@ -196,7 +207,7 @@ export function DataLeadHubHeader({
           <button aria-label="Закрыть меню" onClick={closeMobileMenu} type="button">×</button>
         </div>
         <nav aria-label="Мобильная навигация">
-          {navigation.map((item) => {
+          {navigation.filter((item) => !item.reserved).map((item) => {
             const active = pathname === item.href || item.aliases?.includes(pathname);
             return (
               <Link className={active ? "active" : ""} href={item.href} key={item.href} onClick={closeMobileMenu}>
@@ -210,7 +221,9 @@ export function DataLeadHubHeader({
           {mode === "app" ? (
             <>
               <Link href="/notifications" onClick={closeMobileMenu}>
-                Уведомления{notificationsCount ? ` (${notificationsCount})` : ""}
+                <BellIcon />
+                <span>Уведомления</span>
+                <strong>{notificationsCount || 0}</strong>
               </Link>
               <button
                 type="button"
@@ -280,6 +293,20 @@ function MobileNavIcon({ label }: { label: string }) {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24">
       <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7 8a7 7 0 0 0-14 0" />
+    </svg>
+  );
+}
+
+function BellIcon() {
+  return (
+    <svg aria-hidden="true" className="parsehub-bell-icon" fill="none" viewBox="0 0 24 24">
+      <path
+        d="M18 9.8c0-3.35-2.35-5.8-6-5.8s-6 2.45-6 5.8v2.9c0 .75-.28 1.48-.78 2.04L4.4 15.7c-.56.65-.1 1.65.76 1.65h13.68c.86 0 1.32-1 .76-1.65l-.82-.96A3.1 3.1 0 0 1 18 12.7V9.8Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+      <path d="M9.8 19.1a2.4 2.4 0 0 0 4.4 0" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
     </svg>
   );
 }

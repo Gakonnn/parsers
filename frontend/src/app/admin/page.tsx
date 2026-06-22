@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/empty-state";
 import { StatusPill } from "@/components/status-pill";
 import { api } from "@/lib/api";
 import { formatDate, formatMoney, truncateMiddle } from "@/lib/format";
-import type { AuditLog, Invoice, PaymentQrSetting, SubscriptionPlan, SupportMessage, User } from "@/lib/types";
+import type { AuditLog, Invoice, PaymentQrSetting, SubscriptionPlan, SupportMessage, UsageSummary, User } from "@/lib/types";
 
 const sourceOptions = ["olx", "krisha", "2gis"];
 
@@ -53,8 +53,30 @@ function receiptIdForInvoice(invoice: Invoice): string {
   return typeof receiptId === "string" && receiptId.trim() ? receiptId : invoice.provider_invoice_id || "-";
 }
 
+const limitNumberFormatter = new Intl.NumberFormat("ru-KZ");
+
+function formatLimitNumber(value?: number | null): string {
+  if (value === undefined || value === null) return "-";
+  if (value < 0) return "Безлимит";
+  return limitNumberFormatter.format(value);
+}
+
+function formatRemainingRecords(usage?: UsageSummary): string {
+  if (!usage) return "-";
+  if (usage.subscription.plan.max_records_per_month < 0) return "Безлимит";
+  return limitNumberFormatter.format(Math.max(0, usage.records_remaining));
+}
+
+function recordsLimitPercent(usage?: UsageSummary): number {
+  const total = usage?.subscription.plan.max_records_per_month ?? 0;
+  const used = usage?.records_used ?? 0;
+  if (total <= 0) return 0;
+  return Math.min(100, Math.max(0, (used / total) * 100));
+}
+
 export default function AdminPage() {
   const [users, setUsers] = useState<User[]>([]);
+  const [usageByUser, setUsageByUser] = useState<Record<string, UsageSummary>>({});
   const [audit, setAudit] = useState<AuditLog[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
@@ -62,6 +84,7 @@ export default function AdminPage() {
   const [paymentQr, setPaymentQr] = useState<PaymentQrSetting | null>(null);
   const [selectedPlanByUser, setSelectedPlanByUser] = useState<Record<string, string>>({});
   const [planForm, setPlanForm] = useState<PlanForm>(initialPlanForm);
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [paymentQrForm, setPaymentQrForm] = useState<PaymentQrForm>(initialPaymentQrForm);
   const [activeSection, setActiveSection] = useState<AdminSection>("support");
   const [error, setError] = useState("");
@@ -69,7 +92,7 @@ export default function AdminPage() {
   const [busy, setBusy] = useState("");
 
   const usersById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
-  const pendingSupportCount = supportMessages.filter((item) => item.status !== "closed").length;
+  const pendingSupportCount = supportMessages.length;
   const pendingInvoiceCount = invoices.filter((invoice) => invoice.status !== "paid").length;
   const publicPlanCount = plans.filter((plan) => plan.is_public && plan.is_active).length;
 
@@ -96,6 +119,14 @@ export default function AdminPage() {
     setPlans(planResponse);
     setSupportMessages(supportResponse.items);
     setPaymentQr(paymentQrResponse);
+    const usageEntries = await Promise.allSettled(
+      usersResponse.items.map(async (user) => [user.id, await api.adminUserUsage(user.id)] as const),
+    );
+    const nextUsageByUser: Record<string, UsageSummary> = {};
+    usageEntries.forEach((entry) => {
+      if (entry.status === "fulfilled") nextUsageByUser[entry.value[0]] = entry.value[1];
+    });
+    setUsageByUser(nextUsageByUser);
     setPaymentQrForm(
       paymentQrResponse
         ? {
@@ -163,12 +194,12 @@ export default function AdminPage() {
     }
   }
 
-  async function createPlan(event: FormEvent<HTMLFormElement>) {
+  async function savePlan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy("create-plan");
+    setBusy(editingPlanId ? `save-plan-${editingPlanId}` : "create-plan");
     setMessage("");
     try {
-      await api.adminCreatePlan({
+      const payload = {
         code: planForm.code.trim().toLowerCase(),
         name: planForm.name.trim(),
         description: planForm.description.trim() || null,
@@ -179,12 +210,51 @@ export default function AdminPage() {
         allowed_sources: planForm.allowed_sources,
         is_active: true,
         is_public: planForm.is_public,
-      });
+      };
+      if (editingPlanId) {
+        await api.adminUpdatePlan(editingPlanId, payload);
+      } else {
+        await api.adminCreatePlan(payload);
+      }
       setPlanForm(initialPlanForm);
-      setMessage("Тариф создан.");
+      setEditingPlanId(null);
+      setMessage(editingPlanId ? "Тариф обновлен." : "Тариф создан.");
       await load();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Не удалось создать тариф");
+      setMessage(err instanceof Error ? err.message : "Не удалось сохранить тариф");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  function editPlan(plan: SubscriptionPlan) {
+    setEditingPlanId(plan.id);
+    setPlanForm({
+      code: plan.code,
+      name: plan.name,
+      description: plan.description || "",
+      price_kzt: plan.price_kzt,
+      max_records_per_month: plan.max_records_per_month,
+      allowed_sources: plan.allowed_sources,
+      is_public: plan.is_public,
+    });
+    setActiveSection("plans");
+  }
+
+  async function deletePlan(plan: SubscriptionPlan) {
+    if (!window.confirm(`Удалить тариф "${plan.name}" из каталога?`)) return;
+    setBusy(`delete-plan-${plan.id}`);
+    setMessage("");
+    try {
+      await api.adminDeletePlan(plan.id);
+      if (editingPlanId === plan.id) {
+        setEditingPlanId(null);
+        setPlanForm(initialPlanForm);
+      }
+      setMessage("Тариф удален.");
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Не удалось удалить тариф");
     } finally {
       setBusy("");
     }
@@ -199,6 +269,21 @@ export default function AdminPage() {
       await load();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Не удалось обновить пользователя");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function deleteUser(user: User) {
+    if (!window.confirm(`Удалить пользователя ${user.email}?`)) return;
+    setBusy(`delete-user-${user.id}`);
+    setMessage("");
+    try {
+      await api.adminDeleteUser(user.id);
+      setMessage("Пользователь удален.");
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Не удалось удалить пользователя");
     } finally {
       setBusy("");
     }
@@ -220,20 +305,6 @@ export default function AdminPage() {
     }
   }
 
-  async function togglePlan(plan: SubscriptionPlan, field: "is_active" | "is_public") {
-    setBusy(`plan-${plan.id}`);
-    setMessage("");
-    try {
-      await api.adminUpdatePlan(plan.id, { [field]: !plan[field] });
-      setMessage("Тариф обновлен.");
-      await load();
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Не удалось обновить тариф");
-    } finally {
-      setBusy("");
-    }
-  }
-
   async function markInvoicePaid(invoice: Invoice) {
     setBusy(`invoice-${invoice.id}`);
     setMessage("");
@@ -248,15 +319,16 @@ export default function AdminPage() {
     }
   }
 
-  async function updateSupportMessage(item: SupportMessage, status: "new" | "in_progress" | "closed") {
-    setBusy(`support-${item.id}`);
+  async function deleteSupportMessage(item: SupportMessage) {
+    if (!window.confirm(`Удалить обращение от ${item.email}?`)) return;
+    setBusy(`delete-support-${item.id}`);
     setMessage("");
     try {
-      await api.adminUpdateSupportMessage(item.id, status);
-      setMessage("Статус обращения обновлен.");
+      await api.adminDeleteSupportMessage(item.id);
+      setMessage("Обращение удалено.");
       await load();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Не удалось обновить обращение");
+      setMessage(err instanceof Error ? err.message : "Не удалось удалить обращение");
     } finally {
       setBusy("");
     }
@@ -264,7 +336,7 @@ export default function AdminPage() {
 
   if (error) {
     return (
-      <AppShell eyebrow="Администрирование" title="Админ-панель">
+      <AppShell eyebrow="Администрирование" title="Администратор">
         <div className="panel-card">
           <EmptyState title="Нет доступа" text={error} />
         </div>
@@ -276,7 +348,7 @@ export default function AdminPage() {
     <AppShell
       actions={<button className="ghost-button" type="button" onClick={refreshAdmin}>Обновить</button>}
       eyebrow="Администрирование"
-      title="Админ-панель"
+      title="Администратор"
     >
       {message ? <div className={message.includes("Не удалось") ? "form-message error admin-message" : "form-message admin-message"}>{message}</div> : null}
 
@@ -341,9 +413,9 @@ export default function AdminPage() {
                     <div className="admin-support-footer">
                       <small>{formatDate(item.created_at)} · {item.source}</small>
                       <div className="button-row">
-                        <button className="ghost-button small-button" disabled={busy === `support-${item.id}` || item.status === "new"} type="button" onClick={() => updateSupportMessage(item, "new").catch(() => undefined)}>Новое</button>
-                        <button className="ghost-button small-button" disabled={busy === `support-${item.id}` || item.status === "in_progress"} type="button" onClick={() => updateSupportMessage(item, "in_progress").catch(() => undefined)}>В работе</button>
-                        <button className="ghost-button small-button" disabled={busy === `support-${item.id}` || item.status === "closed"} type="button" onClick={() => updateSupportMessage(item, "closed").catch(() => undefined)}>Закрыто</button>
+                        <button className="ghost-button danger-button small-button" disabled={busy === `delete-support-${item.id}`} type="button" onClick={() => deleteSupportMessage(item).catch(() => undefined)}>
+                          Удалить
+                        </button>
                       </div>
                     </div>
                   </article>
@@ -362,40 +434,58 @@ export default function AdminPage() {
               <button className="ghost-button" type="button" onClick={refreshAdmin}>Обновить</button>
             </div>
             <div className="admin-user-list">
-              {users.map((user) => (
-                <article className="admin-user-card" key={user.id}>
-                  <div className="admin-user-main">
-                    <strong>{user.full_name || user.email}</strong>
-                    <span>{user.email}</span>
-                    <small>{truncateMiddle(user.id)}</small>
-                  </div>
-                  <div className="admin-user-controls">
-                    <label>
-                      <span>Роль</span>
-                      <select value={user.role} disabled={busy === `user-${user.id}`} onChange={(event) => updateUser(user, { role: event.target.value }).catch(() => undefined)}>
-                        <option value="user">user</option>
-                        <option value="admin">admin</option>
-                      </select>
-                    </label>
-                    <label>
-                      <span>Статус</span>
-                      <select value={user.is_active ? "active" : "blocked"} disabled={busy === `user-${user.id}`} onChange={(event) => updateUser(user, { is_active: event.target.value === "active" }).catch(() => undefined)}>
-                        <option value="active">Активен</option>
-                        <option value="blocked">Отключен</option>
-                      </select>
-                    </label>
-                    <label>
-                      <span>Тариф</span>
-                      <select value={selectedPlanByUser[user.id] || ""} onChange={(event) => setSelectedPlanByUser((current) => ({ ...current, [user.id]: event.target.value }))}>
-                        {plans.map((plan) => <option key={plan.id} value={plan.code}>{plan.name} ({plan.code})</option>)}
-                      </select>
-                    </label>
-                    <button className="primary-button" disabled={!plans.length || busy === `assign-${user.id}`} type="button" onClick={() => assignPlan(user).catch(() => undefined)}>
-                      Назначить
-                    </button>
-                  </div>
-                </article>
-              ))}
+              {users.map((user) => {
+                const usage = usageByUser[user.id];
+                return (
+                  <article className="admin-user-card" key={user.id}>
+                    <div className="admin-user-main">
+                      <strong>{user.full_name || user.email}</strong>
+                      <span>{user.email}</span>
+                      <small>{truncateMiddle(user.id)}</small>
+                    </div>
+                    <div className="admin-user-limit">
+                      <span>Остаток записей</span>
+                      <strong>{formatRemainingRecords(usage)}</strong>
+                      <small>
+                        {usage
+                          ? `${formatLimitNumber(usage.records_used)} / ${formatLimitNumber(usage.subscription.plan.max_records_per_month)} использовано`
+                          : "Загружаем лимит"}
+                      </small>
+                      <div className="admin-user-limit-bar" aria-hidden="true">
+                        <i style={{ width: `${recordsLimitPercent(usage)}%` }} />
+                      </div>
+                    </div>
+                    <div className="admin-user-controls">
+                      <label>
+                        <span>Роль</span>
+                        <select value={user.role} disabled={busy === `user-${user.id}`} onChange={(event) => updateUser(user, { role: event.target.value }).catch(() => undefined)}>
+                          <option value="user">user</option>
+                          <option value="admin">admin</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>Статус</span>
+                        <select value={user.is_active ? "active" : "blocked"} disabled={busy === `user-${user.id}`} onChange={(event) => updateUser(user, { is_active: event.target.value === "active" }).catch(() => undefined)}>
+                          <option value="active">Активен</option>
+                          <option value="blocked">Отключен</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>Тариф</span>
+                        <select value={selectedPlanByUser[user.id] || ""} onChange={(event) => setSelectedPlanByUser((current) => ({ ...current, [user.id]: event.target.value }))}>
+                          {plans.map((plan) => <option key={plan.id} value={plan.code}>{plan.name} ({plan.code})</option>)}
+                        </select>
+                      </label>
+                      <button className="primary-button" disabled={!plans.length || busy === `assign-${user.id}`} type="button" onClick={() => assignPlan(user).catch(() => undefined)}>
+                        Назначить
+                      </button>
+                      <button className="ghost-button danger-button" disabled={busy === `delete-user-${user.id}`} type="button" onClick={() => deleteUser(user).catch(() => undefined)}>
+                        Удалить
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           </section>
         ) : null}
@@ -403,10 +493,13 @@ export default function AdminPage() {
         {activeSection === "plans" ? (
           <section className="admin-grid">
             <div className="panel-card plan-builder-card">
-              <div className="section-heading"><span className="eyebrow">Тарифы</span><h2>Создать тариф</h2></div>
-              <form className="admin-form" onSubmit={createPlan}>
+              <div className="section-heading">
+                <span className="eyebrow">Тарифы</span>
+                <h2>{editingPlanId ? "Редактировать тариф" : "Создать тариф"}</h2>
+              </div>
+              <form className="admin-form" onSubmit={savePlan}>
                 <div className="form-grid two equal">
-                  <label className="field-block compact"><span>Код</span><input value={planForm.code} onChange={(event) => setPlanField("code", event.target.value)} required /></label>
+                  <label className="field-block compact"><span>Код</span><input disabled={Boolean(editingPlanId)} value={planForm.code} onChange={(event) => setPlanField("code", event.target.value)} required /></label>
                   <label className="field-block compact"><span>Название</span><input value={planForm.name} onChange={(event) => setPlanField("name", event.target.value)} required /></label>
                 </div>
                 <label className="field-block compact"><span>Описание</span><input value={planForm.description} onChange={(event) => setPlanField("description", event.target.value)} /></label>
@@ -434,7 +527,16 @@ export default function AdminPage() {
                   ))}
                 </div>
                 <label className="toggle-line"><input checked={planForm.is_public} type="checkbox" onChange={(event) => setPlanField("is_public", event.target.checked)} /> Публичный тариф</label>
-                <button className="primary-button wide" disabled={busy === "create-plan"} type="submit">Создать тариф</button>
+                <div className="button-row admin-form-actions">
+                  <button className="primary-button wide" disabled={busy === "create-plan" || busy === `save-plan-${editingPlanId}`} type="submit">
+                    {editingPlanId ? "Сохранить" : "Создать тариф"}
+                  </button>
+                  {editingPlanId ? (
+                    <button className="ghost-button" type="button" onClick={() => { setEditingPlanId(null); setPlanForm(initialPlanForm); }}>
+                      Отмена
+                    </button>
+                  ) : null}
+                </div>
               </form>
             </div>
 
@@ -449,8 +551,8 @@ export default function AdminPage() {
                     </div>
                     <small>{plan.max_records_per_month} записей · {plan.allowed_sources.join(", ") || "all"}</small>
                     <div className="button-row">
-                      <button className="ghost-button" disabled={busy === `plan-${plan.id}`} type="button" onClick={() => togglePlan(plan, "is_active").catch(() => undefined)}>{plan.is_active ? "Отключить" : "Включить"}</button>
-                      <button className="ghost-button" disabled={busy === `plan-${plan.id}`} type="button" onClick={() => togglePlan(plan, "is_public").catch(() => undefined)}>{plan.is_public ? "Скрыть" : "Опубликовать"}</button>
+                      <button className="ghost-button" disabled={busy === `delete-plan-${plan.id}`} type="button" onClick={() => editPlan(plan)}>Редактировать</button>
+                      <button className="ghost-button danger-button" disabled={busy === `delete-plan-${plan.id}`} type="button" onClick={() => deletePlan(plan).catch(() => undefined)}>Удалить</button>
                     </div>
                   </article>
                 ))}

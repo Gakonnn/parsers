@@ -176,10 +176,15 @@ export const api = {
   twoGisRubrics: () => apiRequest<TwoGisRubricsTree>("/parser-meta/2gis/rubrics"),
   twoGisCities: () => apiRequest<TwoGisCitiesTree>("/parser-meta/2gis/cities"),
   adminUsers: () => apiRequest<ListResponse<User>>("/admin/users?limit=30"),
+  adminUserUsage: (userId: string) => apiRequest<UsageSummary>(`/admin/users/${userId}/usage`),
   adminUpdateUser: (userId: string, payload: Partial<Pick<User, "full_name" | "role" | "is_active" | "is_verified">>) =>
     apiRequest<User>(`/admin/users/${userId}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
+    }),
+  adminDeleteUser: (userId: string) =>
+    apiRequest<void>(`/admin/users/${userId}`, {
+      method: "DELETE",
     }),
   adminAudit: () => apiRequest<ListResponse<AuditLog>>("/admin/audit-logs?limit=40"),
   adminSupportMessages: () => apiRequest<ListResponse<SupportMessage>>("/admin/support-messages?limit=40"),
@@ -187,6 +192,10 @@ export const api = {
     apiRequest<SupportMessage>(`/admin/support-messages/${messageId}`, {
       method: "PATCH",
       body: JSON.stringify({ status }),
+    }),
+  adminDeleteSupportMessage: (messageId: string) =>
+    apiRequest<void>(`/admin/support-messages/${messageId}`, {
+      method: "DELETE",
     }),
   adminPlans: () => apiRequest<SubscriptionPlan[]>("/billing/admin/plans"),
   adminCreatePlan: (payload: {
@@ -209,6 +218,10 @@ export const api = {
     apiRequest<SubscriptionPlan>(`/billing/admin/plans/${planId}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
+    }),
+  adminDeletePlan: (planId: string) =>
+    apiRequest<void>(`/billing/admin/plans/${planId}`, {
+      method: "DELETE",
     }),
   adminAssignSubscription: (userId: string, planCode: string) =>
     apiRequest<UserSubscription>(`/billing/admin/users/${userId}/subscription`, {

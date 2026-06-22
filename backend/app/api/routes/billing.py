@@ -370,7 +370,13 @@ def create_plan(
 
 @router.get("/admin/plans", response_model=list[SubscriptionPlanPublic])
 def list_admin_plans(db: Session = Depends(get_db), _: User = Depends(require_admin)) -> list[SubscriptionPlan]:
-    return list(db.scalars(select(SubscriptionPlan).order_by(SubscriptionPlan.price_kzt.asc(), SubscriptionPlan.name.asc())).all())
+    return list(
+        db.scalars(
+            select(SubscriptionPlan)
+            .where(SubscriptionPlan.is_public.is_(True))
+            .order_by(SubscriptionPlan.price_kzt.asc(), SubscriptionPlan.name.asc())
+        ).all()
+    )
 
 
 @router.patch("/admin/plans/{plan_id}", response_model=SubscriptionPlanPublic)
@@ -401,6 +407,36 @@ def update_plan(
     db.commit()
     db.refresh(plan)
     return plan
+
+
+@router.delete("/admin/plans/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_plan(
+    plan_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(require_admin),
+) -> None:
+    plan = db.scalar(select(SubscriptionPlan).where(SubscriptionPlan.id == plan_id))
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
+    linked_subscriptions = db.scalar(select(func.count()).select_from(UserSubscription).where(UserSubscription.plan_id == plan.id)) or 0
+    linked_invoices = db.scalar(select(func.count()).select_from(Invoice).where(Invoice.plan_id == plan.id)) or 0
+    if linked_subscriptions or linked_invoices:
+        # Keep existing users/subscriptions valid, but remove the plan from admin/public catalogs.
+        plan.is_public = False
+    else:
+        db.delete(plan)
+    log_event(
+        db,
+        event_type="plan.deleted",
+        actor_user=current_admin,
+        entity_type="subscription_plan",
+        entity_id=plan.id,
+        message="Subscription plan deleted from catalog",
+        payload={"code": plan.code, "linked_subscriptions": linked_subscriptions, "linked_invoices": linked_invoices},
+        request=request,
+    )
+    db.commit()
 
 
 @router.post("/admin/users/{user_id}/subscription", response_model=UserSubscriptionPublic)

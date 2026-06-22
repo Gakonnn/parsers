@@ -113,6 +113,31 @@ def update_user(
     return user
 
 
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(
+    user_id: UUID,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(require_admin),
+) -> None:
+    user = db.scalar(select(User).where(User.id == user_id))
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if user.id == current_admin.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Admin cannot delete own account")
+    log_event(
+        db,
+        event_type="user.deleted",
+        actor_user=current_admin,
+        target_user=user,
+        entity_type="user",
+        entity_id=user.id,
+        message="User account deleted by admin",
+        payload={"email": user.email},
+    )
+    db.delete(user)
+    db.commit()
+
+
 @router.get("/users/{user_id}/jobs", response_model=ParserJobListResponse)
 def list_user_jobs(
     user_id: UUID,
@@ -268,3 +293,25 @@ def update_support_message(
     db.commit()
     db.refresh(item)
     return item
+
+
+@router.delete("/support-messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_support_message(
+    message_id: UUID,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(require_admin),
+) -> None:
+    item = db.scalar(select(SupportMessage).where(SupportMessage.id == message_id))
+    if item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Support message not found")
+    log_event(
+        db,
+        event_type="support.message_deleted",
+        actor_user=current_admin,
+        entity_type="support_message",
+        entity_id=item.id,
+        message="Support message deleted by admin",
+        payload={"email": item.email, "source": item.source},
+    )
+    db.delete(item)
+    db.commit()
