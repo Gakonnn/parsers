@@ -409,7 +409,7 @@ def update_plan(
     return plan
 
 
-@router.delete("/admin/plans/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/admin/plans/{plan_id}")
 def delete_plan(
     plan_id: UUID,
     request: Request,

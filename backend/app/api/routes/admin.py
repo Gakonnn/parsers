@@ -113,7 +113,7 @@ def update_user(
     return user
 
 
-@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/users/{user_id}")
 def delete_user(
     user_id: UUID,
     db: Session = Depends(get_db),
@@ -295,7 +295,7 @@ def update_support_message(
     return item
 
 
-@router.delete("/support-messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/support-messages/{message_id}")
 def delete_support_message(
     message_id: UUID,
     db: Session = Depends(get_db),
