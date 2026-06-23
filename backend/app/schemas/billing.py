@@ -21,6 +21,7 @@ class SubscriptionPlanPublic(BaseModel):
     allowed_sources: list[str]
     is_active: bool
     is_public: bool
+    is_default: bool
 
 
 class SubscriptionPlanCreate(BaseModel):
@@ -35,6 +36,7 @@ class SubscriptionPlanCreate(BaseModel):
     allowed_sources: list[str] = Field(default_factory=list)
     is_active: bool = True
     is_public: bool = True
+    is_default: bool = False
 
 
 class SubscriptionPlanUpdate(BaseModel):
@@ -48,6 +50,7 @@ class SubscriptionPlanUpdate(BaseModel):
     allowed_sources: list[str] | None = None
     is_active: bool | None = None
     is_public: bool | None = None
+    is_default: bool | None = None
 
 
 class UserSubscriptionPublic(BaseModel):

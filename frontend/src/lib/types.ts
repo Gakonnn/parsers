@@ -91,6 +91,7 @@ export type SubscriptionPlan = {
   allowed_sources: string[];
   is_active: boolean;
   is_public: boolean;
+  is_default: boolean;
 };
 
 export type UserSubscription = {

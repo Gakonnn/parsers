@@ -1759,6 +1759,48 @@ button:disabled {
   text-overflow: ellipsis;
 }
 
+.default-plan-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  margin-left: 10px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(216, 249, 224, 0.86);
+  color: var(--green-800) !important;
+  font-size: 10px !important;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+  box-shadow: inset 0 0 0 1px rgba(24, 121, 78, 0.08);
+}
+
+.default-plan-toggle {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 40px;
+  gap: 9px;
+  padding: 9px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+  box-shadow: var(--shadow-border);
+}
+
+.default-plan-toggle input,
+.default-plan-line input {
+  accent-color: var(--green-800);
+}
+
+.default-plan-toggle:has(input:checked) {
+  color: var(--green-800);
+  background: rgba(216, 249, 224, 0.72);
+}
+
 .admin-user-main small {
   color: var(--muted);
   font-size: 11px;

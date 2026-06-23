@@ -20,6 +20,7 @@ type PlanForm = {
   max_records_per_month: number;
   allowed_sources: string[];
   is_public: boolean;
+  is_default: boolean;
 };
 
 const initialPlanForm: PlanForm = {
@@ -30,6 +31,7 @@ const initialPlanForm: PlanForm = {
   max_records_per_month: 10000,
   allowed_sources: ["olx", "krisha", "2gis"],
   is_public: true,
+  is_default: false,
 };
 
 type PaymentQrForm = {
@@ -210,6 +212,7 @@ export default function AdminPage() {
         allowed_sources: planForm.allowed_sources,
         is_active: true,
         is_public: planForm.is_public,
+        is_default: planForm.is_default,
       };
       if (editingPlanId) {
         await api.adminUpdatePlan(editingPlanId, payload);
@@ -237,8 +240,23 @@ export default function AdminPage() {
       max_records_per_month: plan.max_records_per_month,
       allowed_sources: plan.allowed_sources,
       is_public: plan.is_public,
+      is_default: plan.is_default,
     });
     setActiveSection("plans");
+  }
+
+  async function setDefaultPlan(plan: SubscriptionPlan) {
+    setBusy(`default-plan-${plan.id}`);
+    setMessage("");
+    try {
+      await api.adminUpdatePlan(plan.id, { is_default: true, is_public: true, is_active: true });
+      setMessage(`Тариф "${plan.name}" выбран по умолчанию для новых пользователей.`);
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Не удалось выбрать тариф по умолчанию");
+    } finally {
+      setBusy("");
+    }
   }
 
   async function deletePlan(plan: SubscriptionPlan) {
@@ -527,6 +545,17 @@ export default function AdminPage() {
                   ))}
                 </div>
                 <label className="toggle-line"><input checked={planForm.is_public} type="checkbox" onChange={(event) => setPlanField("is_public", event.target.checked)} /> Публичный тариф</label>
+                <label className="toggle-line default-plan-line">
+                  <input
+                    checked={planForm.is_default}
+                    type="checkbox"
+                    onChange={(event) => {
+                      setPlanField("is_default", event.target.checked);
+                      if (event.target.checked) setPlanField("is_public", true);
+                    }}
+                  />
+                  Тариф по умолчанию для новых пользователей
+                </label>
                 <div className="button-row admin-form-actions">
                   <button className="primary-button wide" disabled={busy === "create-plan" || busy === `save-plan-${editingPlanId}`} type="submit">
                     {editingPlanId ? "Сохранить" : "Создать тариф"}
@@ -546,13 +575,30 @@ export default function AdminPage() {
                 {plans.map((plan) => (
                   <article key={plan.id}>
                     <div>
-                      <strong>{plan.name}</strong>
+                      <strong>{plan.name}{plan.is_default ? <span className="default-plan-badge">По умолчанию</span> : null}</strong>
                       <span>{plan.code} · {formatMoney(plan.price_kzt, plan.currency)}</span>
                     </div>
                     <small>{plan.max_records_per_month} записей · {plan.allowed_sources.join(", ") || "all"}</small>
+                    <label className="default-plan-toggle">
+                      <input
+                        checked={plan.is_default}
+                        disabled={plan.is_default || busy === `default-plan-${plan.id}`}
+                        type="checkbox"
+                        onChange={() => setDefaultPlan(plan).catch(() => undefined)}
+                      />
+                      <span>{plan.is_default ? "Выбран для новых пользователей" : "Сделать тарифом по умолчанию"}</span>
+                    </label>
                     <div className="button-row">
                       <button className="ghost-button" disabled={busy === `delete-plan-${plan.id}`} type="button" onClick={() => editPlan(plan)}>Редактировать</button>
-                      <button className="ghost-button danger-button" disabled={busy === `delete-plan-${plan.id}`} type="button" onClick={() => deletePlan(plan).catch(() => undefined)}>Удалить</button>
+                      <button
+                        className="ghost-button danger-button"
+                        disabled={plan.is_default || busy === `delete-plan-${plan.id}`}
+                        title={plan.is_default ? "Сначала выберите другой тариф по умолчанию" : undefined}
+                        type="button"
+                        onClick={() => deletePlan(plan).catch(() => undefined)}
+                      >
+                        Удалить
+                      </button>
                     </div>
                   </article>
                 ))}

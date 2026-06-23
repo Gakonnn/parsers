@@ -70,10 +70,15 @@ def get_or_create_free_plan(db: Session) -> SubscriptionPlan:
         if not plan.allowed_sources:
             plan.allowed_sources = settings.free_plan_sources
             changed = True
+        default_count = db.scalar(select(func.count()).select_from(SubscriptionPlan).where(SubscriptionPlan.is_default.is_(True))) or 0
+        if default_count == 0 and not plan.is_default:
+            plan.is_default = True
+            changed = True
         if changed:
             db.flush()
         return plan
 
+    default_count = db.scalar(select(func.count()).select_from(SubscriptionPlan).where(SubscriptionPlan.is_default.is_(True))) or 0
     plan = SubscriptionPlan(
         code=FREE_PLAN_CODE,
         name="Бесплатный",
@@ -84,10 +89,26 @@ def get_or_create_free_plan(db: Session) -> SubscriptionPlan:
         allowed_sources=settings.free_plan_sources,
         is_active=True,
         is_public=True,
+        is_default=default_count == 0,
     )
     db.add(plan)
     db.flush()
     return plan
+
+
+def get_default_subscription_plan(db: Session) -> SubscriptionPlan:
+    plan = db.scalar(
+        select(SubscriptionPlan)
+        .where(
+            SubscriptionPlan.is_default.is_(True),
+            SubscriptionPlan.is_active.is_(True),
+            SubscriptionPlan.is_public.is_(True),
+        )
+        .order_by(SubscriptionPlan.updated_at.desc())
+    )
+    if plan is not None:
+        return plan
+    return get_or_create_free_plan(db)
 
 
 def get_or_create_active_subscription(db: Session, user: User) -> UserSubscription:
@@ -105,7 +126,7 @@ def get_or_create_active_subscription(db: Session, user: User) -> UserSubscripti
     if subscription is not None:
         return subscription
 
-    plan = get_or_create_free_plan(db)
+    plan = get_default_subscription_plan(db)
     subscription = UserSubscription(
         user_id=user.id,
         plan_id=plan.id,

@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_admin
@@ -50,6 +50,14 @@ from app.services.quota import current_month_start, get_monthly_usage, get_or_cr
 router = APIRouter()
 
 
+def _make_plan_default(db: Session, plan: SubscriptionPlan) -> None:
+    if not plan.is_active or not plan.is_public:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Default plan must be active and public")
+    db.execute(update(SubscriptionPlan).where(SubscriptionPlan.id != plan.id).values(is_default=False))
+    plan.is_default = True
+    db.flush()
+
+
 @router.get("/provider", response_model=PaymentProviderPublic)
 def read_payment_provider(_: User = Depends(get_current_user)) -> PaymentProviderPublic:
     settings = get_settings()
@@ -76,7 +84,7 @@ def list_public_plans(db: Session = Depends(get_db)) -> list[SubscriptionPlan]:
         db.scalars(
             select(SubscriptionPlan)
             .where(SubscriptionPlan.is_active.is_(True), SubscriptionPlan.is_public.is_(True))
-            .order_by(SubscriptionPlan.price_kzt.asc(), SubscriptionPlan.name.asc())
+            .order_by(SubscriptionPlan.is_default.desc(), SubscriptionPlan.price_kzt.asc(), SubscriptionPlan.name.asc())
         ).all()
     )
 
@@ -350,9 +358,12 @@ def create_plan(
         allowed_sources=payload.allowed_sources,
         is_active=payload.is_active,
         is_public=payload.is_public,
+        is_default=False,
     )
     db.add(plan)
     db.flush()
+    if payload.is_default:
+        _make_plan_default(db, plan)
     log_event(
         db,
         event_type="plan.created",
@@ -360,7 +371,7 @@ def create_plan(
         entity_type="subscription_plan",
         entity_id=plan.id,
         message="Subscription plan created",
-        payload={"code": plan.code, "price_kzt": plan.price_kzt},
+        payload={"code": plan.code, "price_kzt": plan.price_kzt, "is_default": plan.is_default},
         request=request,
     )
     db.commit()
@@ -374,7 +385,7 @@ def list_admin_plans(db: Session = Depends(get_db), _: User = Depends(require_ad
         db.scalars(
             select(SubscriptionPlan)
             .where(SubscriptionPlan.is_public.is_(True))
-            .order_by(SubscriptionPlan.price_kzt.asc(), SubscriptionPlan.name.asc())
+            .order_by(SubscriptionPlan.is_default.desc(), SubscriptionPlan.price_kzt.asc(), SubscriptionPlan.name.asc())
         ).all()
     )
 
@@ -391,9 +402,16 @@ def update_plan(
     if plan is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
     updates = payload.model_dump(exclude_unset=True)
+    requested_default = updates.pop("is_default", None)
     for key, value in updates.items():
         setattr(plan, key, value)
-    if updates:
+    if plan.is_default and (not plan.is_active or not plan.is_public):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Choose another default plan before hiding this one")
+    if requested_default is True:
+        _make_plan_default(db, plan)
+    elif requested_default is False and plan.is_default:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Choose another default plan before disabling this one")
+    if updates or requested_default is not None:
         log_event(
             db,
             event_type="plan.updated",
@@ -401,7 +419,12 @@ def update_plan(
             entity_type="subscription_plan",
             entity_id=plan.id,
             message="Subscription plan updated",
-            payload={"updated_fields": sorted(updates.keys()), "code": plan.code},
+            payload={
+                "updated_fields": sorted(
+                    [*updates.keys(), "is_default"] if requested_default is not None else updates.keys()
+                ),
+                "code": plan.code,
+            },
             request=request,
         )
     db.commit()
@@ -419,6 +442,8 @@ def delete_plan(
     plan = db.scalar(select(SubscriptionPlan).where(SubscriptionPlan.id == plan_id))
     if plan is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
+    if plan.is_default:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Choose another default plan before deleting this one")
     linked_subscriptions = db.scalar(select(func.count()).select_from(UserSubscription).where(UserSubscription.plan_id == plan.id)) or 0
     linked_invoices = db.scalar(select(func.count()).select_from(Invoice).where(Invoice.plan_id == plan.id)) or 0
     if linked_subscriptions or linked_invoices:
