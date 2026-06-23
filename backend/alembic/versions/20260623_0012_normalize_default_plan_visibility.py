@@ -1,26 +1,30 @@
-"""add default subscription plan flag
+"""normalize default plan visibility
 
-Revision ID: 20260623_0011
-Revises: 20260621_0010
-Create Date: 2026-06-23 00:00:00.000000
+Revision ID: 20260623_0012
+Revises: 20260623_0011
+Create Date: 2026-06-23 00:30:00.000000
 """
 
 from __future__ import annotations
 
-import sqlalchemy as sa
 from alembic import op
 
 
-revision = "20260623_0011"
-down_revision = "20260621_0010"
+revision = "20260623_0012"
+down_revision = "20260623_0011"
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "subscription_plans",
-        sa.Column("is_default", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+    op.execute(
+        """
+        UPDATE subscription_plans
+        SET is_active = true,
+            is_public = true,
+            updated_at = now()
+        WHERE is_default = true
+        """
     )
     op.execute(
         """
@@ -30,12 +34,19 @@ def upgrade() -> None:
             is_public = true,
             updated_at = now()
         WHERE code = 'free'
+          AND NOT EXISTS (
+              SELECT 1
+              FROM subscription_plans
+              WHERE is_default = true
+          )
         """
     )
     op.execute(
         """
         UPDATE subscription_plans
         SET is_default = true,
+            is_active = true,
+            is_public = true,
             updated_at = now()
         WHERE id = (
             SELECT id
@@ -52,16 +63,7 @@ def upgrade() -> None:
         )
         """
     )
-    op.create_index(
-        "uq_subscription_plans_single_default",
-        "subscription_plans",
-        ["is_default"],
-        unique=True,
-        postgresql_where=sa.text("is_default IS TRUE"),
-    )
-    op.alter_column("subscription_plans", "is_default", server_default=None)
 
 
 def downgrade() -> None:
-    op.drop_index("uq_subscription_plans_single_default", table_name="subscription_plans")
-    op.drop_column("subscription_plans", "is_default")
+    pass

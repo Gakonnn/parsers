@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -70,6 +70,12 @@ def get_or_create_free_plan(db: Session) -> SubscriptionPlan:
         if not plan.allowed_sources:
             plan.allowed_sources = settings.free_plan_sources
             changed = True
+        if not plan.is_active:
+            plan.is_active = True
+            changed = True
+        if not plan.is_public:
+            plan.is_public = True
+            changed = True
         default_count = db.scalar(select(func.count()).select_from(SubscriptionPlan).where(SubscriptionPlan.is_default.is_(True))) or 0
         if default_count == 0 and not plan.is_default:
             plan.is_default = True
@@ -108,7 +114,12 @@ def get_default_subscription_plan(db: Session) -> SubscriptionPlan:
     )
     if plan is not None:
         return plan
-    return get_or_create_free_plan(db)
+    free_plan = get_or_create_free_plan(db)
+    if not free_plan.is_default:
+        db.execute(update(SubscriptionPlan).where(SubscriptionPlan.id != free_plan.id).values(is_default=False))
+        free_plan.is_default = True
+        db.flush()
+    return free_plan
 
 
 def get_or_create_active_subscription(db: Session, user: User) -> UserSubscription:
